@@ -1,27 +1,37 @@
-# Stock Clean It
+# Stock Clean It · servicios y frecuencias
 
-Web app responsive para controlar el stock de insumos por consorcio o servicio, con HTML, CSS, JavaScript, Bootstrap y Supabase.
+Web app responsive para controlar el stock de insumos por consorcio o servicio, desarrollada con HTML, CSS, JavaScript, Bootstrap y Supabase.
 
-## Incluye
+## Incluye esta versión
 
-- Vista operario limitada al servicio asignado.
-- Catálogo visual con búsqueda, categorías y carga rápida de cantidades.
-- Estados **Crítico**, **Bajo**, **Correcto** y **Sin informar**.
-- Panel administrador con KPIs, alertas y estado por servicio.
-- Administración de servicios, insumos, fotos, usuarios y roles.
-- Historial de cambios y actualización en vivo con Supabase Realtime.
-- Políticas RLS para impedir que un operario vea o modifique otros servicios.
-- Catálogo inicial con 35 insumos de Clean It.
+- Acceso público sin usuario ni contraseña para operarios.
+- La aplicación siempre abre en la vista pública, aunque exista una sesión administrativa guardada.
+- El operario sólo selecciona el servicio, escribe su nombre y continúa.
+- Selector con **sólo el nombre del servicio**.
+- Descripción y frecuencia visible después de seleccionar el servicio.
+- Edición de nombre, dirección, descripción/frecuencia, observaciones y estado desde Administración.
+- 64 servicios de Clean It precargados desde el archivo operativo del 23/06/2026.
+- Carga rápida de insumos no listados.
+- Inventario en vivo, alertas, historial y Supabase Realtime.
+- 35 insumos iniciales de Clean It.
+- Políticas RLS y funciones RPC: el acceso anónimo no abre las tablas completas.
 
-## Puesta en marcha
+## Actualizar la instalación existente
 
-### 1. Supabase
+1. Abrir **Supabase → SQL Editor**.
+2. Ejecutar primero `supabase-schema.sql`.
+3. Ejecutar `actualizar-servicios.sql`.
+
+El segundo archivo carga o actualiza los 64 servicios, sus direcciones y sus frecuencias, los deja activos y elimina `Consorcio Demo` sólo cuando no tiene datos relacionados.
+
+La lista de respaldo también está disponible en `servicios-precargados.json`.
+
+## Instalación nueva
 
 1. Crear un proyecto en Supabase.
-2. Abrir **SQL Editor**.
-3. Ejecutar todo `supabase-schema.sql`.
-4. Crear el primer usuario en **Authentication → Users**.
-5. Ejecutar:
+2. Ejecutar `supabase-schema.sql` en **SQL Editor**.
+3. Crear un usuario en **Authentication → Users**.
+4. Promoverlo a administrador:
 
 ```sql
 update public.profiles
@@ -29,34 +39,28 @@ set role = 'admin', full_name = 'Administrador Clean It'
 where email = 'TU-CORREO@DOMINIO.COM';
 ```
 
-### 2. Configuración
+5. Editar `config.js` con la URL y la clave pública `anon` del proyecto.
+6. Subir todos los archivos a GitHub y activar GitHub Pages.
 
-Editar `config.js`:
+## Edición de frecuencias
 
-```javascript
-SUPABASE_URL: "https://TU-PROYECTO.supabase.co",
-SUPABASE_ANON_KEY: "TU-ANON-KEY"
-```
+En la app:
 
-Usar solamente la clave pública `anon`. No colocar la clave `service_role` en GitHub.
+**Administración → Servicios → lápiz**
 
-### 3. Usuarios operarios
+El campo **Descripción o frecuencia** se muestra al operario únicamente después de elegir el servicio. En el selector se mantiene solamente el nombre para que la búsqueda sea rápida.
 
-1. Crear cada usuario desde **Supabase → Authentication → Users**.
-2. Ingresar a la web como administrador.
-3. Abrir **Usuarios**.
-4. Asignar cada operario a un servicio.
+## Archivos principales
 
-### 4. GitHub Pages
+- `index.html`: interfaz.
+- `styles.css`: diseño.
+- `app.js`: lógica pública y administrativa.
+- `config.js`: conexión con Supabase.
+- `supabase-schema.sql`: estructura completa y carga segura inicial.
+- `actualizar-servicios.sql`: actualización masiva para la instalación existente.
+- `servicios-precargados.json`: respaldo legible de los servicios y frecuencias.
+- `seed-materials.json`: catálogo inicial de insumos.
 
-1. Subir todos los archivos a la raíz de un repositorio.
-2. Ir a **Settings → Pages**.
-3. Seleccionar `Deploy from a branch`, rama `main`, carpeta `/root`.
+## Seguridad
 
-No requiere compilación.
-
-## Gestión del dato
-
-La app diferencia cantidad cero de ausencia de relevamiento. Un material sin registro aparece como **Sin informar**, no como faltante. Esto evita pedidos innecesarios por datos incompletos.
-
-Las imágenes SVG incluidas son ilustrativas y sirven para el arranque. Desde la vista administrador pueden reemplazarse por fotografías reales de cada producto, almacenadas en Supabase Storage.
+La carga pública utiliza funciones RPC `security definer`. Los operarios pueden consultar servicios activos y actualizar inventarios, pero no pueden consultar perfiles, historial administrativo ni notas internas.
