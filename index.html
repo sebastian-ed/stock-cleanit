@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d6efd">
+  <title>Stock Clean It</title>
+  <meta name="description" content="Control de stock en vivo por servicio para Clean It.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="loadingScreen" class="loading-screen">
+    <div class="brand-mark mb-3">CI</div>
+    <div class="spinner-border text-primary" role="status" aria-label="Cargando"></div>
+    <p class="mt-3 mb-0 text-secondary fw-bold">Cargando inventario...</p>
+  </div>
+
+  <main id="authView" class="auth-view d-none">
+    <section class="auth-panel">
+      <div class="auth-copy">
+        <span class="eyebrow">Clean It · Operaciones</span>
+        <h1>Stock operativo, sin sorpresas.</h1>
+        <p>Los operarios informan existencias desde el servicio y administración detecta faltantes antes de que se transformen en urgencias.</p>
+        <div class="auth-feature"><i class="bi bi-broadcast-pin"></i><span>Actualización en vivo por consorcio</span></div>
+        <div class="auth-feature"><i class="bi bi-exclamation-triangle"></i><span>Alertas por nivel crítico y relevamientos vencidos</span></div>
+        <div class="auth-feature"><i class="bi bi-images"></i><span>Catálogo visual administrable</span></div>
+      </div>
+
+      <div class="auth-card shadow-lg">
+        <div class="d-flex align-items-center gap-3 mb-4">
+          <div class="brand-mark brand-mark-sm">CI</div>
+          <div><div class="fw-black fs-4">Stock Clean It</div><div class="text-secondary small">Acceso seguro</div></div>
+        </div>
+        <div id="setupWarning" class="alert alert-warning d-none" role="alert"><strong>Falta configurar Supabase.</strong><div class="small mt-1">Editá <code>config.js</code> con la URL y la clave pública del proyecto.</div></div>
+        <form id="loginForm" novalidate>
+          <label for="loginEmail" class="form-label">Correo</label>
+          <div class="input-group mb-3"><span class="input-group-text"><i class="bi bi-envelope"></i></span><input id="loginEmail" type="email" class="form-control" autocomplete="email" required placeholder="nombre@cleanit.com.ar"></div>
+          <label for="loginPassword" class="form-label">Contraseña</label>
+          <div class="input-group mb-3"><span class="input-group-text"><i class="bi bi-lock"></i></span><input id="loginPassword" type="password" class="form-control" autocomplete="current-password" required placeholder="••••••••"><button id="togglePassword" class="btn btn-outline-secondary" type="button" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button></div>
+          <div id="loginError" class="alert alert-danger py-2 d-none"></div>
+          <button id="loginButton" class="btn btn-primary btn-lg w-100 fw-bold" type="submit"><span class="login-label">Ingresar</span><span class="login-spinner spinner-border spinner-border-sm d-none" role="status"></span></button>
+        </form>
+        <p class="small text-secondary text-center mt-4 mb-0">Cada usuario accede únicamente al servicio que tiene asignado.</p>
+      </div>
+    </section>
+  </main>
+
+  <div id="appShell" class="app-shell d-none">
+    <header class="topbar sticky-top">
+      <div class="container-fluid px-3 px-lg-4 d-flex align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3 min-w-0">
+          <button id="adminMenuButton" class="btn btn-light btn-icon d-none d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminSidebarMobile" aria-label="Abrir menú"><i class="bi bi-list"></i></button>
+          <div class="brand-mark brand-mark-nav">CI</div>
+          <div class="min-w-0"><div class="fw-black text-truncate" id="appTitle">Stock Clean It</div><div class="small text-secondary text-truncate" id="appSubtitle">Control operativo</div></div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div class="user-chip d-none d-sm-flex"><i class="bi bi-person-circle"></i><div class="min-w-0"><div id="headerUserName" class="small fw-bold text-truncate">Usuario</div><div id="headerUserRole" class="micro text-secondary text-truncate">Operario</div></div></div>
+          <button id="logoutButton" class="btn btn-outline-secondary btn-icon" type="button" title="Cerrar sesión"><i class="bi bi-box-arrow-right"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <section id="operatorView" class="d-none">
+      <div class="container py-4 pb-6">
+        <div id="operatorNoService" class="empty-state d-none"><i class="bi bi-building-exclamation"></i><h2>Usuario sin servicio asignado</h2><p>Administración debe vincular este usuario con un consorcio antes de cargar stock.</p></div>
+        <div id="operatorContent">
+          <div class="hero-card mb-4"><div><span class="eyebrow text-white-50">Relevamiento actual</span><h1 id="operatorServiceName" class="mb-1">Servicio</h1><p id="operatorServiceAddress" class="mb-0 text-white-50">Dirección</p></div><div class="hero-meta"><div class="hero-meta-label">Última actualización</div><div id="operatorLastUpdate" class="hero-meta-value">Sin informar</div></div></div>
+          <div class="row g-3 mb-4">
+            <div class="col-6 col-lg-3"><div class="metric-card"><span class="metric-icon bg-danger-subtle text-danger"><i class="bi bi-exclamation-octagon"></i></span><div><div id="operatorCriticalCount" class="metric-value">0</div><div class="metric-label">Críticos</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="metric-card"><span class="metric-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-arrow-down-circle"></i></span><div><div id="operatorLowCount" class="metric-value">0</div><div class="metric-label">Bajos</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="metric-card"><span class="metric-icon bg-success-subtle text-success"><i class="bi bi-check-circle"></i></span><div><div id="operatorOkCount" class="metric-value">0</div><div class="metric-label">Correctos</div></div></div></div>
+            <div class="col-6 col-lg-3"><div class="metric-card"><span class="metric-icon bg-secondary-subtle text-secondary"><i class="bi bi-question-circle"></i></span><div><div id="operatorUnreportedCount" class="metric-value">0</div><div class="metric-label">Sin informar</div></div></div></div>
+          </div>
+          <div class="section-card mb-3"><div class="d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center"><div><h2 class="section-title mb-1">Existencias del servicio</h2><p class="text-secondary mb-0">Ingresá la cantidad física disponible. No cargues lo que “debería haber”.</p></div><div class="inventory-filters"><div class="input-group"><span class="input-group-text"><i class="bi bi-search"></i></span><input id="operatorSearch" class="form-control" type="search" placeholder="Buscar insumo"></div><select id="operatorCategory" class="form-select" aria-label="Filtrar categoría"></select></div></div></div>
+          <div id="operatorInventoryGrid" class="inventory-grid" data-context="operator"></div>
+        </div>
+      </div>
+      <div id="operatorSaveBar" class="save-bar"><div class="container d-flex align-items-center justify-content-between gap-3"><div class="d-none d-md-block"><strong id="operatorDraftCount">0 cambios pendientes</strong><div class="small text-secondary">Guardar registra fecha, hora y usuario.</div></div><button id="operatorSaveButton" class="btn btn-primary btn-lg fw-bold flex-grow-1 flex-md-grow-0" type="button"><i class="bi bi-cloud-check me-2"></i>Guardar relevamiento completo</button></div></div>
+    </section>
+
+    <section id="adminView" class="d-none admin-layout">
+      <aside class="admin-sidebar d-none d-lg-flex"><nav class="admin-nav" aria-label="Administración">
+        <button class="admin-nav-item active" data-admin-tab="dashboard"><i class="bi bi-grid-1x2"></i><span>Panel general</span></button><button class="admin-nav-item" data-admin-tab="inventory"><i class="bi bi-boxes"></i><span>Inventario</span></button><button class="admin-nav-item" data-admin-tab="materials"><i class="bi bi-droplet"></i><span>Insumos</span></button><button class="admin-nav-item" data-admin-tab="services"><i class="bi bi-buildings"></i><span>Servicios</span></button><button class="admin-nav-item" data-admin-tab="users"><i class="bi bi-people"></i><span>Usuarios</span></button><button class="admin-nav-item" data-admin-tab="history"><i class="bi bi-clock-history"></i><span>Historial</span></button>
+      </nav></aside>
+      <div class="offcanvas offcanvas-start" tabindex="-1" id="adminSidebarMobile"><div class="offcanvas-header"><h5 class="offcanvas-title fw-black">Administración</h5><button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button></div><div class="offcanvas-body p-2"><nav class="admin-nav"><button class="admin-nav-item active" data-admin-tab="dashboard" data-bs-dismiss="offcanvas"><i class="bi bi-grid-1x2"></i><span>Panel general</span></button><button class="admin-nav-item" data-admin-tab="inventory" data-bs-dismiss="offcanvas"><i class="bi bi-boxes"></i><span>Inventario</span></button><button class="admin-nav-item" data-admin-tab="materials" data-bs-dismiss="offcanvas"><i class="bi bi-droplet"></i><span>Insumos</span></button><button class="admin-nav-item" data-admin-tab="services" data-bs-dismiss="offcanvas"><i class="bi bi-buildings"></i><span>Servicios</span></button><button class="admin-nav-item" data-admin-tab="users" data-bs-dismiss="offcanvas"><i class="bi bi-people"></i><span>Usuarios</span></button><button class="admin-nav-item" data-admin-tab="history" data-bs-dismiss="offcanvas"><i class="bi bi-clock-history"></i><span>Historial</span></button></nav></div></div>
+      <div class="admin-main">
+        <div id="adminDashboardPanel" class="admin-panel" data-panel="dashboard">
+          <div class="panel-heading"><div><span class="eyebrow">Visión ejecutiva</span><h1>Panel general</h1><p>Prioridades de abastecimiento y calidad del dato.</p></div><button id="refreshAdminButton" class="btn btn-outline-primary"><i class="bi bi-arrow-clockwise me-2"></i>Actualizar</button></div>
+          <div class="row g-3 mb-4"><div class="col-6 col-xl-3"><div class="kpi-card"><div class="kpi-label">Servicios activos</div><div id="adminKpiServices" class="kpi-value">0</div><div class="kpi-foot"><i class="bi bi-buildings"></i> Operación</div></div></div><div class="col-6 col-xl-3"><div class="kpi-card danger"><div class="kpi-label">Ítems críticos</div><div id="adminKpiCritical" class="kpi-value">0</div><div class="kpi-foot"><i class="bi bi-exclamation-octagon"></i> Requieren acción</div></div></div><div class="col-6 col-xl-3"><div class="kpi-card warning"><div class="kpi-label">Relevamientos vencidos</div><div id="adminKpiStale" class="kpi-value">0</div><div class="kpi-foot"><i class="bi bi-calendar-x"></i> Sin datos recientes</div></div></div><div class="col-6 col-xl-3"><div class="kpi-card"><div class="kpi-label">Insumos activos</div><div id="adminKpiMaterials" class="kpi-value">0</div><div class="kpi-foot"><i class="bi bi-droplet"></i> Catálogo</div></div></div></div>
+          <div class="row g-4"><div class="col-xl-7"><div class="section-card h-100"><div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="section-title mb-1">Estado por servicio</h2><p class="text-secondary mb-0">Ordenado por urgencia.</p></div><input id="adminServiceSearch" class="form-control compact-search" type="search" placeholder="Buscar servicio"></div><div id="serviceHealthList" class="service-health-list"></div></div></div><div class="col-xl-5"><div class="section-card h-100"><div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="section-title mb-1">Alertas prioritarias</h2><p class="text-secondary mb-0">Críticos y faltantes.</p></div><span id="priorityAlertCount" class="badge text-bg-danger rounded-pill">0</span></div><div id="priorityAlertsList" class="priority-list"></div></div></div></div>
+        </div>
+        <div id="adminInventoryPanel" class="admin-panel d-none" data-panel="inventory"><div class="panel-heading"><div><span class="eyebrow">Control detallado</span><h1>Inventario por servicio</h1><p>Revisá o corregí el relevamiento informado por cada equipo.</p></div></div><div class="section-card mb-3"><div class="row g-3 align-items-end"><div class="col-lg-5"><label class="form-label">Servicio</label><select id="adminInventoryService" class="form-select form-select-lg"></select></div><div class="col-lg-4"><label class="form-label">Buscar</label><div class="input-group"><span class="input-group-text"><i class="bi bi-search"></i></span><input id="adminInventorySearch" class="form-control" type="search" placeholder="Insumo"></div></div><div class="col-lg-3"><label class="form-label">Categoría</label><select id="adminInventoryCategory" class="form-select"></select></div></div></div><div id="adminInventorySummary" class="alert alert-light border mb-3"></div><div id="adminInventoryGrid" class="inventory-grid" data-context="admin"></div><div class="text-end mt-4"><button id="adminInventorySaveButton" class="btn btn-primary btn-lg fw-bold"><i class="bi bi-cloud-check me-2"></i>Guardar inventario completo</button></div></div>
+        <div id="adminMaterialsPanel" class="admin-panel d-none" data-panel="materials"><div class="panel-heading"><div><span class="eyebrow">Catálogo maestro</span><h1>Insumos</h1><p>Gestioná nombres, imágenes, unidades y umbrales de reposición.</p></div><button id="addMaterialButton" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>Nuevo insumo</button></div><div class="section-card"><div class="d-flex flex-column flex-md-row gap-3 justify-content-between mb-3"><input id="materialsSearch" class="form-control compact-search" type="search" placeholder="Buscar insumo"><select id="materialsStatusFilter" class="form-select compact-select"><option value="all">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option></select></div><div class="table-responsive"><table class="table align-middle admin-table"><thead><tr><th>Insumo</th><th>Categoría</th><th>Unidad</th><th>Crítico</th><th>Objetivo</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody id="materialsTableBody"></tbody></table></div></div></div>
+        <div id="adminServicesPanel" class="admin-panel d-none" data-panel="services"><div class="panel-heading"><div><span class="eyebrow">Estructura operativa</span><h1>Servicios</h1><p>Alta y mantenimiento de consorcios o establecimientos.</p></div><button id="addServiceButton" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>Nuevo servicio</button></div><div class="section-card"><div class="table-responsive"><table class="table align-middle admin-table"><thead><tr><th>Servicio</th><th>Dirección</th><th>Último relevamiento</th><th>Usuarios</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody id="servicesTableBody"></tbody></table></div></div></div>
+        <div id="adminUsersPanel" class="admin-panel d-none" data-panel="users"><div class="panel-heading"><div><span class="eyebrow">Accesos y permisos</span><h1>Usuarios</h1><p>Asigná cada operario a un servicio y definí administradores.</p></div></div><div class="alert alert-info"><i class="bi bi-info-circle me-2"></i>Los usuarios se crean en <strong>Supabase → Authentication → Users</strong>. Al crearlos aparecen aquí automáticamente.</div><div class="section-card"><div class="table-responsive"><table class="table align-middle admin-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Servicio asignado</th><th class="text-end">Acciones</th></tr></thead><tbody id="usersTableBody"></tbody></table></div></div></div>
+        <div id="adminHistoryPanel" class="admin-panel d-none" data-panel="history"><div class="panel-heading"><div><span class="eyebrow">Trazabilidad</span><h1>Historial</h1><p>Cambios recientes de cantidades por servicio, insumo y usuario.</p></div></div><div class="section-card"><div class="table-responsive"><table class="table align-middle admin-table"><thead><tr><th>Fecha</th><th>Servicio</th><th>Insumo</th><th>Cambio</th><th>Usuario</th></tr></thead><tbody id="historyTableBody"></tbody></table></div></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="modal fade" id="serviceModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><form id="serviceForm" class="modal-content"><div class="modal-header"><h5 id="serviceModalTitle" class="modal-title fw-black">Nuevo servicio</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="serviceId" type="hidden"><div class="mb-3"><label class="form-label">Nombre</label><input id="serviceName" class="form-control" required maxlength="120"></div><div class="mb-3"><label class="form-label">Dirección</label><input id="serviceAddress" class="form-control" maxlength="180"></div><div class="mb-3"><label class="form-label">Observaciones</label><textarea id="serviceNotes" class="form-control" rows="3" maxlength="500"></textarea></div><div class="form-check form-switch"><input id="serviceActive" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="serviceActive">Servicio activo</label></div></div><div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form></div></div>
+  <div class="modal fade" id="materialModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><form id="materialForm" class="modal-content"><div class="modal-header"><h5 id="materialModalTitle" class="modal-title fw-black">Nuevo insumo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="materialId" type="hidden"><div class="row g-3"><div class="col-md-8"><label class="form-label">Nombre</label><input id="materialName" class="form-control" required maxlength="150"></div><div class="col-md-4"><label class="form-label">Categoría</label><input id="materialCategory" class="form-control" required list="categorySuggestions" maxlength="80"><datalist id="categorySuggestions"></datalist></div><div class="col-md-6"><label class="form-label">Detalle / marca</label><input id="materialDetail" class="form-control" maxlength="180"></div><div class="col-md-6"><label class="form-label">Unidad de conteo</label><input id="materialUnit" class="form-control" required placeholder="bidón x 5 Lts" maxlength="80"></div><div class="col-md-4"><label class="form-label">Nivel crítico</label><input id="materialCritical" class="form-control" type="number" min="0" step="0.01" required></div><div class="col-md-4"><label class="form-label">Stock objetivo</label><input id="materialTarget" class="form-control" type="number" min="0" step="0.01" required></div><div class="col-md-4"><label class="form-label">Orden</label><input id="materialSort" class="form-control" type="number" min="0" step="1" value="100"></div><div class="col-md-7"><label class="form-label">Foto del insumo</label><input id="materialImageFile" class="form-control" type="file" accept="image/png,image/jpeg,image/webp"><div class="form-text">También podés conservar la imagen existente.</div></div><div class="col-md-5"><div class="material-image-preview-wrap"><img id="materialImagePreview" class="material-image-preview" alt="Vista previa"></div></div><div class="col-12"><div class="form-check form-switch"><input id="materialActive" class="form-check-input" type="checkbox" checked><label class="form-check-label" for="materialActive">Insumo activo</label></div></div></div></div><div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button id="materialSubmitButton" class="btn btn-primary" type="submit">Guardar</button></div></form></div></div>
+  <div class="modal fade" id="userModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><form id="userForm" class="modal-content"><div class="modal-header"><h5 class="modal-title fw-black">Editar usuario</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><input id="userId" type="hidden"><div class="mb-3"><label class="form-label">Nombre</label><input id="userFullName" class="form-control" required maxlength="120"></div><div class="mb-3"><label class="form-label">Rol</label><select id="userRole" class="form-select"><option value="operator">Operario</option><option value="admin">Administrador</option></select></div><div class="mb-3"><label class="form-label">Servicio asignado</label><select id="userService" class="form-select"></select><div class="form-text">Los administradores pueden quedar sin servicio.</div></div></div><div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-primary" type="submit">Guardar</button></div></form></div></div>
+  <div class="toast-container position-fixed bottom-0 end-0 p-3"><div id="appToast" class="toast border-0 shadow" role="status"><div class="d-flex"><div id="toastBody" class="toast-body fw-bold">Listo</div><button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button></div></div></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script><script src="app.js"></script>
+</body>
+</html>
