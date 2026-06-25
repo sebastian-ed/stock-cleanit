@@ -19,6 +19,7 @@
     materials: [],
     stocks: [],
     extraStocks: [],
+    materialVisibility: [],
     profiles: [],
     history: [],
     extraHistory: [],
@@ -28,7 +29,8 @@
     extraDrafts: new Map(),
     channel: null,
     timer: null,
-    handlingSession: false
+    handlingSession: false,
+    adminFlowRequested: false
   };
 
   const E = {};
@@ -68,13 +70,27 @@
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
     });
 
-    S.sb.auth.onAuthStateChange((_event, session) => {
-      setTimeout(() => handleSession(session), 0);
+    S.sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        S.adminFlowRequested = false;
+        setTimeout(() => handleSession(null), 0);
+        return;
+      }
+      if (event === 'SIGNED_IN' && S.adminFlowRequested) {
+        setTimeout(() => handleSession(session), 0);
+      }
     });
 
-    const { data, error } = await S.sb.auth.getSession();
-    if (error) toast('No se pudo recuperar la sesión.', 'error');
-    await handleSession(data?.session || null);
+    // La URL siempre abre en modo público, incluso si quedó una sesión
+    // administrativa guardada en este navegador.
+    try {
+      await loadPublicData(null);
+      showPublicEntry();
+    } catch (error) {
+      console.error(error);
+      showPublicEntry();
+      showEntryError(error.message || 'No se pudieron cargar los servicios.');
+    }
   }
 
   function bindEvents() {
@@ -152,18 +168,15 @@
       const { data, error } = await S.sb.from('profiles').select('*').eq('id', session.user.id).single();
       if (error || !data) throw new Error('El usuario no tiene perfil. Ejecutá el esquema SQL y revisá el trigger de perfiles.');
 
-      S.profile = data;
-      S.mode = data.role === 'admin' ? 'admin' : 'operator-auth';
-
-      if (S.mode === 'admin') {
-        await refreshAdmin(false);
-        setupRealtime();
-        showAdminApp();
-      } else {
-        teardownRealtime();
-        await refreshAuthenticatedOperator();
-        showOperatorApp();
+      if (data.role !== 'admin') {
+        throw new Error('Este acceso es exclusivo para administradores. Los operarios ingresan desde la vista pública.');
       }
+
+      S.profile = data;
+      S.mode = 'admin';
+      await refreshAdmin(false);
+      setupRealtime();
+      showAdminApp();
     } catch (error) {
       console.error(error);
       if (session) {
@@ -190,25 +203,28 @@
     S.materials = Array.isArray(payload.materials) ? payload.materials : [];
     S.stocks = Array.isArray(payload.stocks) ? payload.stocks : [];
     S.extraStocks = Array.isArray(payload.extra_stocks) ? payload.extra_stocks : [];
+    S.materialVisibility = [];
     S.publicService = serviceId || null;
     populateCategories();
   }
 
   async function refreshAuthenticatedOperator() {
     if (!S.profile) return;
-    const [servicesResult, materialsResult, stocksResult, extrasResult] = await Promise.all([
+    const [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult] = await Promise.all([
       S.sb.from('services').select('*').order('name'),
       S.sb.from('materials').select('*').order('category').order('sort_order').order('name'),
       S.sb.from('service_stock').select('*').order('updated_at', { ascending: false }),
-      S.sb.from('service_extra_stock').select('*').order('name')
+      S.sb.from('service_extra_stock').select('*').order('name'),
+      S.sb.from('service_material_visibility').select('*')
     ]);
-    [servicesResult, materialsResult, stocksResult, extrasResult].forEach((result) => {
+    [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult].forEach((result) => {
       if (result.error) throw result.error;
     });
     S.services = servicesResult.data || [];
     S.materials = materialsResult.data || [];
     S.stocks = stocksResult.data || [];
     S.extraStocks = extrasResult.data || [];
+    S.materialVisibility = visibilityResult.data || [];
     populateCategories();
   }
 
@@ -217,17 +233,18 @@
     if (feedback) buttonBusy(E.refreshAdminButton, true, 'Actualizando...');
 
     try {
-      const [servicesResult, materialsResult, stocksResult, extrasResult, profilesResult, historyResult, extraHistoryResult] = await Promise.all([
+      const [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult, profilesResult, historyResult, extraHistoryResult] = await Promise.all([
         S.sb.from('services').select('*').order('name'),
         S.sb.from('materials').select('*').order('category').order('sort_order').order('name'),
         S.sb.from('service_stock').select('*').order('updated_at', { ascending: false }),
         S.sb.from('service_extra_stock').select('*').order('name'),
+        S.sb.from('service_material_visibility').select('*'),
         S.sb.from('profiles').select('*').order('full_name'),
         S.sb.from('stock_history').select('*').order('changed_at', { ascending: false }).limit(300),
         S.sb.from('extra_stock_history').select('*').order('changed_at', { ascending: false }).limit(300)
       ]);
 
-      [servicesResult, materialsResult, stocksResult, extrasResult, profilesResult, historyResult, extraHistoryResult].forEach((result) => {
+      [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult, profilesResult, historyResult, extraHistoryResult].forEach((result) => {
         if (result.error) throw result.error;
       });
 
@@ -235,6 +252,7 @@
       S.materials = materialsResult.data || [];
       S.stocks = stocksResult.data || [];
       S.extraStocks = extrasResult.data || [];
+      S.materialVisibility = visibilityResult.data || [];
       S.profiles = profilesResult.data || [];
       S.history = historyResult.data || [];
       S.extraHistory = extraHistoryResult.data || [];
@@ -261,6 +279,7 @@
     S.channel = S.sb.channel(`stock-admin-${S.profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_stock' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_extra_stock' }, scheduleAdminRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_material_visibility' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'materials' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleAdminRefresh)
@@ -330,7 +349,7 @@
     const activeServices = S.services.filter((item) => item.active !== false);
     const remembered = S.publicService || localStorage.getItem('stockCleanItService') || '';
     E.publicServiceSelect.innerHTML = '<option value="">Seleccionar servicio...</option>' + activeServices.map((item) => (
-      `<option value="${ea(item.id)}">${eh(item.name)}${item.address ? ` · ${eh(item.address)}` : ''}</option>`
+      `<option value="${ea(item.id)}">${eh(item.name)}</option>`
     )).join('');
     if (activeServices.some((item) => item.id === remembered)) E.publicServiceSelect.value = remembered;
     E.publicStartButton.disabled = !configured || activeServices.length === 0;
@@ -347,9 +366,14 @@
     }
 
     const reporter = E.publicReporterName.value.trim();
+    if (!reporter) {
+      showEntryError('Ingresá tu nombre para continuar.');
+      E.publicReporterName.focus();
+      return;
+    }
+
     localStorage.setItem('stockCleanItService', serviceId);
-    if (reporter) localStorage.setItem('stockCleanItReporter', reporter);
-    else localStorage.removeItem('stockCleanItReporter');
+    localStorage.setItem('stockCleanItReporter', reporter);
 
     buttonBusy(E.publicStartButton, true, 'Abriendo inventario...');
     showLoading();
@@ -376,8 +400,22 @@
     showPublicEntry();
   }
 
-  function openAdminLogin() {
+  async function openAdminLogin() {
     hideLoginError();
+    S.adminFlowRequested = true;
+
+    try {
+      const { data, error } = await S.sb.auth.getSession();
+      if (error) throw error;
+      if (data?.session) {
+        await handleSession(data.session);
+        if (S.mode === 'admin') return;
+      }
+    } catch (error) {
+      console.error(error);
+      await S.sb.auth.signOut();
+    }
+
     M.adminLogin.show();
     setTimeout(() => E.loginEmail.focus(), 250);
   }
@@ -385,6 +423,7 @@
   async function login(event) {
     event.preventDefault();
     hideLoginError();
+    S.adminFlowRequested = true;
     loginBusy(true);
     try {
       const { error } = await S.sb.auth.signInWithPassword({
@@ -474,6 +513,9 @@
     const data = summary(selectedService.id);
     E.operatorServiceName.textContent = selectedService.name;
     E.operatorServiceAddress.textContent = selectedService.address || 'Dirección no informada';
+    const serviceDescription = selectedService.description?.trim() || '';
+    E.operatorServiceDescription.classList.toggle('d-none', !serviceDescription);
+    E.operatorServiceDescription.querySelector('span').textContent = serviceDescription;
     E.operatorLastUpdate.textContent = data.last ? relative(data.last) : 'Sin informar';
     E.operatorCriticalCount.textContent = data.critical;
     E.operatorLowCount.textContent = data.low;
@@ -541,7 +583,7 @@
 
     const alerts = [];
     activeServices.forEach((current) => {
-      activeMaterials().forEach((item) => {
+      serviceMaterials(current.id).forEach((item) => {
         const currentStock = stock(current.id, item.id);
         if (!currentStock) return;
         const status = stockStatus(currentStock.quantity, item);
@@ -588,8 +630,9 @@
     const selectedService = service(S.adminService);
     const data = selectedService ? summary(selectedService.id) : null;
     const extrasCount = selectedService ? activeExtras(selectedService.id).length : 0;
+    const hiddenCount = selectedService ? activeMaterials().filter((item) => !isMaterialEnabled(selectedService.id, item.id)).length : 0;
     E.adminInventorySummary.innerHTML = selectedService
-      ? `<strong>${eh(selectedService.name)}</strong> · ${data.last ? `Última actualización: ${eh(fmt(data.last))}` : 'Sin relevamiento'} · <span class="text-danger fw-bold">${data.critical} críticos</span> · <span class="text-warning-emphasis fw-bold">${data.low} bajos</span> · ${data.unreported} sin informar · ${extrasCount} adicionales`
+      ? `<strong>${eh(selectedService.name)}</strong> · ${data.last ? `Última actualización: ${eh(fmt(data.last))}` : 'Sin relevamiento'} · <span class="text-danger fw-bold">${data.critical} críticos</span> · <span class="text-warning-emphasis fw-bold">${data.low} bajos</span> · ${data.unreported} sin informar · ${extrasCount} adicionales · <span class="fw-bold">${hiddenCount} ocultos para operarios</span>`
       : 'Creá un servicio para comenzar.';
     renderAdminGrid();
   }
@@ -612,7 +655,8 @@
     }
 
     const query = norm(searchText);
-    const masterItems = activeMaterials().filter((item) => (
+    const availableMaterials = context === 'admin' ? activeMaterials() : serviceMaterials(serviceId);
+    const masterItems = availableMaterials.filter((item) => (
       (category === 'all' || item.category === category) &&
       (!query || norm(`${item.name} ${item.detail || ''} ${item.category}`).includes(query))
     ));
@@ -636,7 +680,8 @@
     const reported = Boolean(currentStock) || pending !== undefined;
     const value = pending !== undefined ? pending : (currentStock?.quantity ?? 0);
     const status = reported ? stockStatus(value, item) : 'unreported';
-    return cardMarkup({ serviceId, item, context, value, status, type: 'material' });
+    const enabled = isMaterialEnabled(serviceId, item.id);
+    return cardMarkup({ serviceId, item, context, value, status, type: 'material', enabled });
   }
 
   function extraCard(serviceId, item, context) {
@@ -646,15 +691,17 @@
     return cardMarkup({ serviceId, item, context, value, status, type: 'extra' });
   }
 
-  function cardMarkup({ serviceId, item, context, value, status, type }) {
+  function cardMarkup({ serviceId, item, context, value, status, type, enabled = true }) {
     const labels = { unreported: 'Sin informar', critical: 'Crítico', low: 'Bajo', ok: 'Correcto' };
     const isExtra = type === 'extra';
     const image = item.image_url || 'assets/materials/default.svg';
-    return `<article class="material-card status-${status}${isExtra ? ' extra-material-card' : ''}" data-item-card="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" data-context="${context}">
+    const hiddenForOperator = !isExtra && context === 'admin' && !enabled;
+    return `<article class="material-card status-${status}${isExtra ? ' extra-material-card' : ''}${hiddenForOperator ? ' material-hidden-for-operator' : ''}" data-item-card="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" data-context="${context}">
       <div class="material-image-wrap">
         <img class="material-image" src="${ea(image)}" alt="${ea(item.name)}" loading="lazy" onerror="this.src='assets/materials/default.svg'">
         <span class="material-status ${status}" data-status-label>${labels[status]}</span>
         ${isExtra ? '<span class="extra-material-badge">No listado</span>' : ''}
+        ${hiddenForOperator ? '<span class="material-hidden-badge"><i class="bi bi-eye-slash"></i> Oculto</span>' : ''}
       </div>
       <div class="material-body">
         <div class="material-category">${isExtra ? 'Agregado por operario' : eh(item.category)}</div>
@@ -667,6 +714,7 @@
         </div>
         <div class="stock-unit">${eh(item.unit)}</div>
         <div class="threshold-note">Crítico ≤ ${qty(item.critical_level)} · objetivo ${qty(item.target_level)}</div>
+        ${!isExtra && context === 'admin' ? `<button class="btn btn-sm ${enabled ? 'btn-outline-secondary' : 'btn-outline-success'} w-100 mt-3 material-visibility-button" type="button" data-toggle-service-material="${item.id}" data-service-id="${serviceId}"><i class="bi bi-${enabled ? 'eye-slash' : 'eye'} me-1"></i>${enabled ? 'Ocultar en este servicio' : 'Habilitar en este servicio'}</button>` : ''}
         ${isExtra && context === 'admin' ? `<button class="btn btn-sm btn-link text-danger w-100 mt-2" type="button" data-toggle-extra="${item.id}"><i class="bi bi-archive me-1"></i>Desactivar adicional</button>` : ''}
       </div>
     </article>`;
@@ -706,6 +754,13 @@
 
     const toggleMaterialButton = event.target.closest('[data-toggle-material]');
     if (toggleMaterialButton) return toggleMaterial(toggleMaterialButton.dataset.toggleMaterial);
+
+    const toggleServiceMaterialButton = event.target.closest('[data-toggle-service-material]');
+    if (toggleServiceMaterialButton) return toggleServiceMaterialVisibility(
+      toggleServiceMaterialButton.dataset.serviceId,
+      toggleServiceMaterialButton.dataset.toggleServiceMaterial,
+      toggleServiceMaterialButton
+    );
 
     const toggleExtraButton = event.target.closest('[data-toggle-extra]');
     if (toggleExtraButton) return toggleExtra(toggleExtraButton.dataset.toggleExtra);
@@ -783,7 +838,8 @@
     buttonBusy(button, true, 'Guardando...');
 
     try {
-      const stockItems = activeMaterials().map((item) => {
+      const inventoryMaterials = S.mode === 'admin' ? activeMaterials() : serviceMaterials(serviceId);
+      const stockItems = inventoryMaterials.map((item) => {
         const currentStock = stock(serviceId, item.id);
         const pending = stockDraft(serviceId, item.id);
         return {
@@ -943,7 +999,7 @@
     E.servicesTableBody.innerHTML = S.services.length ? S.services.map((item) => {
       const data = summary(item.id);
       const users = S.profiles.filter((profileItem) => profileItem.service_id === item.id).length;
-      return `<tr><td><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.notes || '')}</div></td><td>${eh(item.address || '—')}</td><td>${data.last ? eh(relative(data.last)) : '<span class="text-danger fw-bold">Nunca</span>'}</td><td>${users}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" data-edit-service="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle-service="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`;
+      return `<tr><td><div class="table-title">${eh(item.name)}</div><div class="table-subtitle service-description-preview">${eh(item.description || item.notes || 'Sin descripción')}</div></td><td>${eh(item.address || '—')}</td><td>${data.last ? eh(relative(data.last)) : '<span class="text-danger fw-bold">Nunca</span>'}</td><td>${users}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" data-edit-service="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle-service="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`;
     }).join('') : tableEmpty(6, 'Todavía no hay servicios.');
   }
 
@@ -991,6 +1047,7 @@
     E.serviceId.value = item?.id || '';
     E.serviceName.value = item?.name || '';
     E.serviceAddress.value = item?.address || '';
+    E.serviceDescription.value = item?.description || '';
     E.serviceNotes.value = item?.notes || '';
     E.serviceActive.checked = item?.active ?? true;
     M.service.show();
@@ -1002,6 +1059,7 @@
     const payload = {
       name: E.serviceName.value.trim(),
       address: E.serviceAddress.value.trim() || null,
+      description: E.serviceDescription.value.trim() || null,
       notes: E.serviceNotes.value.trim() || null,
       active: E.serviceActive.checked,
       updated_at: new Date().toISOString()
@@ -1112,6 +1170,45 @@
     toast(`Insumo ${item.active ? 'desactivado' : 'activado'}.`, 'success');
   }
 
+
+  async function toggleServiceMaterialVisibility(serviceId, materialId, button) {
+    if (S.mode !== 'admin' || !serviceId || !materialId) return;
+    const item = material(materialId);
+    const selectedService = service(serviceId);
+    if (!item || !selectedService) return;
+
+    const currentlyEnabled = isMaterialEnabled(serviceId, materialId);
+    buttonBusy(button, true, currentlyEnabled ? 'Ocultando...' : 'Habilitando...');
+    try {
+      const { error } = await S.sb.from('service_material_visibility').upsert({
+        service_id: serviceId,
+        material_id: materialId,
+        enabled: !currentlyEnabled,
+        updated_by: S.session.user.id,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'service_id,material_id' });
+      if (error) throw error;
+
+      const existing = S.materialVisibility.find((row) => row.service_id === serviceId && row.material_id === materialId);
+      if (existing) {
+        existing.enabled = !currentlyEnabled;
+        existing.updated_by = S.session.user.id;
+        existing.updated_at = new Date().toISOString();
+      } else {
+        S.materialVisibility.push({ service_id: serviceId, material_id: materialId, enabled: !currentlyEnabled });
+      }
+
+      renderAdminInventory();
+      renderDashboard();
+      toast(`${item.name} ${currentlyEnabled ? 'quedó oculto' : 'volvió a estar visible'} en ${selectedService.name}.`, 'success');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'No se pudo cambiar la visibilidad del insumo.', 'error');
+    } finally {
+      buttonBusy(button, false);
+    }
+  }
+
   async function toggleExtra(id) {
     const item = extra(id);
     if (!item || S.mode !== 'admin') return;
@@ -1152,6 +1249,15 @@
     return S.materials.filter((item) => item.active);
   }
 
+  function isMaterialEnabled(serviceId, materialId) {
+    const setting = S.materialVisibility.find((item) => item.service_id === serviceId && item.material_id === materialId);
+    return setting ? setting.enabled !== false : true;
+  }
+
+  function serviceMaterials(serviceId) {
+    return activeMaterials().filter((item) => isMaterialEnabled(serviceId, item.id));
+  }
+
   function activeExtras(serviceId) {
     return S.extraStocks.filter((item) => item.service_id === serviceId && item.active !== false);
   }
@@ -1183,7 +1289,7 @@
     let unreported = 0;
     let last = null;
 
-    activeMaterials().forEach((item) => {
+    serviceMaterials(serviceId).forEach((item) => {
       const currentStock = stock(serviceId, item.id);
       if (!currentStock) {
         unreported += 1;

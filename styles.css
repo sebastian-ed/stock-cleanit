@@ -14,3 +14,13 @@
 .public-admin-link{margin-top:24px;padding-top:20px;border-top:1px solid var(--ci-border);display:flex;align-items:center;justify-content:space-between;gap:16px;color:var(--ci-muted);font-size:.82rem}.public-admin-link .btn-link{text-decoration:none}.public-admin-link .btn-link:hover{text-decoration:underline}.operator-actions{width:min(100%,760px);display:flex;align-items:center;justify-content:flex-end;gap:12px}.operator-actions .inventory-filters{flex:1}.extra-material-card{border-style:dashed}.extra-material-badge{position:absolute;top:12px;left:12px;border-radius:999px;padding:5px 9px;background:#e8f1ff;color:#0752c9;font-size:.66rem;font-weight:900;box-shadow:0 5px 15px rgba(0,0,0,.06)}
 @media(max-width:991.98px){#adminMenuButton:not(.d-none){display:inline-grid!important}.operator-actions{align-items:stretch;flex-direction:column}.operator-actions .btn{align-self:flex-start}.operator-actions .inventory-filters{width:100%}}
 @media(max-width:575.98px){.public-admin-link{align-items:flex-start;flex-direction:column;gap:4px}.operator-actions .btn{width:100%}.extra-material-badge{top:8px;left:8px}.material-status{top:8px;right:8px}}
+
+
+/* v3 · descripción y frecuencia por servicio */
+.service-frequency-card{max-width:760px;margin-top:16px;padding:11px 13px;border:1px solid rgba(255,255,255,.22);border-radius:14px;background:rgba(255,255,255,.12);display:flex;align-items:flex-start;gap:9px;color:#fff;font-size:.88rem;font-weight:800;line-height:1.4;backdrop-filter:blur(6px)}.service-frequency-card i{margin-top:1px;flex:0 0 auto}.service-description-preview{max-width:540px;white-space:normal;line-height:1.35;margin-top:4px}
+@media(max-width:575.98px){.service-frequency-card{font-size:.8rem;padding:10px 11px}}
+
+
+/* v4 · visibilidad de insumos por servicio */
+.visibility-help{border-radius:16px;font-size:.88rem;font-weight:800}.material-hidden-for-operator{border-style:dashed;border-color:#94a3b8!important;background:#f8fafc}.material-hidden-for-operator .material-image{filter:grayscale(.65);opacity:.58}.material-hidden-for-operator .material-body{background:#f8fafc}.material-hidden-badge{position:absolute;top:12px;left:12px;z-index:2;border-radius:999px;padding:5px 9px;background:#334155;color:#fff;font-size:.66rem;font-weight:900;box-shadow:0 5px 15px rgba(15,23,42,.18)}.material-visibility-button{font-weight:900;border-radius:11px}.material-hidden-for-operator .material-visibility-button{background:#ecfdf3}
+@media(max-width:575.98px){.material-hidden-badge{top:8px;left:8px}.material-visibility-button{font-size:.72rem;padding-left:6px;padding-right:6px}}
