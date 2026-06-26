@@ -19,13 +19,17 @@
     materials: [],
     stocks: [],
     extraStocks: [],
+    materialVisibility: [],
     profiles: [],
     history: [],
     extraHistory: [],
     tab: 'dashboard',
     adminService: null,
     stockDrafts: new Map(),
+    conditionDrafts: new Map(),
     extraDrafts: new Map(),
+    exportServiceIds: new Set(),
+    exportSelectionInitialized: false,
     channel: null,
     timer: null,
     handlingSession: false,
@@ -122,6 +126,13 @@
     E.adminInventoryCategory.addEventListener('change', renderAdminGrid);
     E.adminInventorySaveButton.addEventListener('click', () => saveInventory(S.adminService, 'admin'));
 
+    E.exportServiceSearch.addEventListener('input', renderExportServices);
+    E.exportServiceList.addEventListener('change', handleExportServiceSelection);
+    E.exportSelectAllButton.addEventListener('click', selectAllExportServices);
+    E.exportClearButton.addEventListener('click', clearExportServices);
+    E.exportPreviewButton.addEventListener('click', renderExportPreview);
+    E.exportDownloadButton.addEventListener('click', downloadStockExcel);
+
     E.appShell.addEventListener('click', appClick);
     E.appShell.addEventListener('input', stockInput);
 
@@ -202,25 +213,28 @@
     S.materials = Array.isArray(payload.materials) ? payload.materials : [];
     S.stocks = Array.isArray(payload.stocks) ? payload.stocks : [];
     S.extraStocks = Array.isArray(payload.extra_stocks) ? payload.extra_stocks : [];
+    S.materialVisibility = [];
     S.publicService = serviceId || null;
     populateCategories();
   }
 
   async function refreshAuthenticatedOperator() {
     if (!S.profile) return;
-    const [servicesResult, materialsResult, stocksResult, extrasResult] = await Promise.all([
+    const [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult] = await Promise.all([
       S.sb.from('services').select('*').order('name'),
       S.sb.from('materials').select('*').order('category').order('sort_order').order('name'),
       S.sb.from('service_stock').select('*').order('updated_at', { ascending: false }),
-      S.sb.from('service_extra_stock').select('*').order('name')
+      S.sb.from('service_extra_stock').select('*').order('name'),
+      S.sb.from('service_material_visibility').select('*')
     ]);
-    [servicesResult, materialsResult, stocksResult, extrasResult].forEach((result) => {
+    [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult].forEach((result) => {
       if (result.error) throw result.error;
     });
     S.services = servicesResult.data || [];
     S.materials = materialsResult.data || [];
     S.stocks = stocksResult.data || [];
     S.extraStocks = extrasResult.data || [];
+    S.materialVisibility = visibilityResult.data || [];
     populateCategories();
   }
 
@@ -229,17 +243,18 @@
     if (feedback) buttonBusy(E.refreshAdminButton, true, 'Actualizando...');
 
     try {
-      const [servicesResult, materialsResult, stocksResult, extrasResult, profilesResult, historyResult, extraHistoryResult] = await Promise.all([
+      const [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult, profilesResult, historyResult, extraHistoryResult] = await Promise.all([
         S.sb.from('services').select('*').order('name'),
         S.sb.from('materials').select('*').order('category').order('sort_order').order('name'),
         S.sb.from('service_stock').select('*').order('updated_at', { ascending: false }),
         S.sb.from('service_extra_stock').select('*').order('name'),
+        S.sb.from('service_material_visibility').select('*'),
         S.sb.from('profiles').select('*').order('full_name'),
         S.sb.from('stock_history').select('*').order('changed_at', { ascending: false }).limit(300),
         S.sb.from('extra_stock_history').select('*').order('changed_at', { ascending: false }).limit(300)
       ]);
 
-      [servicesResult, materialsResult, stocksResult, extrasResult, profilesResult, historyResult, extraHistoryResult].forEach((result) => {
+      [servicesResult, materialsResult, stocksResult, extrasResult, visibilityResult, profilesResult, historyResult, extraHistoryResult].forEach((result) => {
         if (result.error) throw result.error;
       });
 
@@ -247,12 +262,20 @@
       S.materials = materialsResult.data || [];
       S.stocks = stocksResult.data || [];
       S.extraStocks = extrasResult.data || [];
+      S.materialVisibility = visibilityResult.data || [];
       S.profiles = profilesResult.data || [];
       S.history = historyResult.data || [];
       S.extraHistory = extraHistoryResult.data || [];
 
       if (!S.adminService || !S.services.some((item) => item.id === S.adminService && item.active)) {
         S.adminService = S.services.find((item) => item.active)?.id || S.services[0]?.id || null;
+      }
+
+      const exportableServiceIds = new Set(S.services.map((item) => item.id));
+      S.exportServiceIds = new Set([...S.exportServiceIds].filter((id) => exportableServiceIds.has(id)));
+      if (!S.exportSelectionInitialized) {
+        S.exportServiceIds = new Set(exportableServiceIds);
+        S.exportSelectionInitialized = true;
       }
 
       populateCategories();
@@ -273,6 +296,7 @@
     S.channel = S.sb.channel(`stock-admin-${S.profile.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_stock' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'service_extra_stock' }, scheduleAdminRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_material_visibility' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'materials' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, scheduleAdminRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, scheduleAdminRefresh)
@@ -531,6 +555,7 @@
   function renderAdmin() {
     renderDashboard();
     renderAdminInventory();
+    renderExport();
     renderMaterials();
     renderServices();
     renderUsers();
@@ -546,6 +571,7 @@
     document.querySelectorAll('[data-admin-tab]').forEach((button) => {
       button.classList.toggle('active', button.dataset.adminTab === tab);
     });
+    if (tab === 'export' && S.mode === 'admin') renderExport();
   }
 
   function renderDashboard() {
@@ -576,11 +602,11 @@
 
     const alerts = [];
     activeServices.forEach((current) => {
-      activeMaterials().forEach((item) => {
+      serviceMaterials(current.id).forEach((item) => {
         const currentStock = stock(current.id, item.id);
         if (!currentStock) return;
-        const status = stockStatus(currentStock.quantity, item);
-        if (status === 'critical' || status === 'low') alerts.push({ service: current, item, quantity: currentStock.quantity, status, extra: false });
+        const status = stockStatus(currentStock.quantity, item, currentStock.condition_status);
+        if (status === 'critical' || status === 'low') alerts.push({ service: current, item, quantity: currentStock.quantity, condition_status: item.control_type === 'quantity_condition' ? currentStock.condition_status : null, status, extra: false });
       });
       activeExtras(current.id).forEach((item) => {
         const status = stockStatus(item.quantity, item);
@@ -592,7 +618,7 @@
     E.priorityAlertCount.textContent = alerts.length;
     E.priorityAlertsList.innerHTML = alerts.length ? alerts.slice(0, 20).map((alert) => (
       `<button class="priority-item ${alert.status === 'low' ? 'low' : ''} text-start border-0 w-100" data-open-service-inventory="${alert.service.id}">
-        <div class="priority-item-title">${eh(alert.item.name)} · ${qty(alert.quantity)}${alert.extra ? ' · adicional' : ''}</div>
+        <div class="priority-item-title">${eh(alert.item.name)} · ${qty(alert.quantity)}${alert.condition_status ? ` · ${eh(conditionLabel(alert.condition_status))}` : ''}${alert.extra ? ' · adicional' : ''}</div>
         <div class="priority-item-meta">${eh(alert.service.name)} · crítico ≤ ${qty(alert.item.critical_level)} · objetivo ${qty(alert.item.target_level)}</div>
       </button>`
     )).join('') : empty('No hay alertas de stock informadas.', 'bi-check-circle');
@@ -623,8 +649,9 @@
     const selectedService = service(S.adminService);
     const data = selectedService ? summary(selectedService.id) : null;
     const extrasCount = selectedService ? activeExtras(selectedService.id).length : 0;
+    const hiddenCount = selectedService ? activeMaterials().filter((item) => !isMaterialEnabled(selectedService.id, item.id)).length : 0;
     E.adminInventorySummary.innerHTML = selectedService
-      ? `<strong>${eh(selectedService.name)}</strong> · ${data.last ? `Última actualización: ${eh(fmt(data.last))}` : 'Sin relevamiento'} · <span class="text-danger fw-bold">${data.critical} críticos</span> · <span class="text-warning-emphasis fw-bold">${data.low} bajos</span> · ${data.unreported} sin informar · ${extrasCount} adicionales`
+      ? `<strong>${eh(selectedService.name)}</strong> · ${data.last ? `Última actualización: ${eh(fmt(data.last))}` : 'Sin relevamiento'} · <span class="text-danger fw-bold">${data.critical} críticos</span> · <span class="text-warning-emphasis fw-bold">${data.low} bajos</span> · ${data.unreported} sin informar · ${extrasCount} adicionales · <span class="fw-bold">${hiddenCount} ocultos para operarios</span>`
       : 'Creá un servicio para comenzar.';
     renderAdminGrid();
   }
@@ -647,7 +674,8 @@
     }
 
     const query = norm(searchText);
-    const masterItems = activeMaterials().filter((item) => (
+    const availableMaterials = context === 'admin' ? activeMaterials() : serviceMaterials(serviceId);
+    const masterItems = availableMaterials.filter((item) => (
       (category === 'all' || item.category === category) &&
       (!query || norm(`${item.name} ${item.detail || ''} ${item.category}`).includes(query))
     ));
@@ -668,46 +696,89 @@
   function materialCard(serviceId, item, context) {
     const currentStock = stock(serviceId, item.id);
     const pending = stockDraft(serviceId, item.id);
+    const pendingCondition = conditionDraft(serviceId, item.id);
+    const conditionStatus = pendingCondition !== undefined ? pendingCondition : (currentStock?.condition_status ?? null);
     const reported = Boolean(currentStock) || pending !== undefined;
     const value = pending !== undefined ? pending : (currentStock?.quantity ?? 0);
-    const status = reported ? stockStatus(value, item) : 'unreported';
-    return cardMarkup({ serviceId, item, context, value, status, type: 'material' });
+    const status = reported ? stockStatus(value, item, conditionStatus) : 'unreported';
+    const enabled = isMaterialEnabled(serviceId, item.id);
+    return cardMarkup({ serviceId, item, context, value, conditionStatus, status, type: 'material', enabled });
   }
 
   function extraCard(serviceId, item, context) {
     const pending = extraDraft(serviceId, item.id);
     const value = pending !== undefined ? pending : (item.quantity ?? 0);
     const status = stockStatus(value, item);
-    return cardMarkup({ serviceId, item, context, value, status, type: 'extra' });
+    return cardMarkup({ serviceId, item, context, value, conditionStatus: null, status, type: 'extra' });
   }
 
-  function cardMarkup({ serviceId, item, context, value, status, type }) {
+  function cardMarkup({ serviceId, item, context, value, conditionStatus, status, type, enabled = true }) {
     const labels = { unreported: 'Sin informar', critical: 'Crítico', low: 'Bajo', ok: 'Correcto' };
     const isExtra = type === 'extra';
     const image = item.image_url || 'assets/materials/default.svg';
-    return `<article class="material-card status-${status}${isExtra ? ' extra-material-card' : ''}" data-item-card="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" data-context="${context}">
+    const hiddenForOperator = !isExtra && context === 'admin' && !enabled;
+    const controlType = isExtra ? 'decimal' : (item.control_type || 'integer');
+    const fractional = controlType === 'fractional';
+    const withCondition = controlType === 'quantity_condition';
+    const inputStep = fractional ? '0.25' : (isExtra ? '0.01' : '1');
+    const stepAmount = fractional ? 0.25 : 1;
+    const conditionClass = withCondition && conditionStatus === 'replace' ? ' condition-replace' : '';
+    const fractionValues = [0, 0.25, 0.5, 0.75, 1];
+    const fractionLabels = ['0', '¼', '½', '¾', '1'];
+    return `<article class="material-card status-${status}${isExtra ? ' extra-material-card' : ''}${hiddenForOperator ? ' material-hidden-for-operator' : ''}${conditionClass}" data-item-card="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" data-context="${context}" data-control-type="${controlType}" data-condition-status="${ea(conditionStatus || '')}">
       <div class="material-image-wrap">
         <img class="material-image" src="${ea(image)}" alt="${ea(item.name)}" loading="lazy" onerror="this.src='assets/materials/default.svg'">
         <span class="material-status ${status}" data-status-label>${labels[status]}</span>
         ${isExtra ? '<span class="extra-material-badge">No listado</span>' : ''}
+        ${hiddenForOperator ? '<span class="material-hidden-badge"><i class="bi bi-eye-slash"></i> Oculto</span>' : ''}
       </div>
       <div class="material-body">
         <div class="material-category">${isExtra ? 'Agregado por operario' : eh(item.category)}</div>
         <div class="material-name">${eh(item.name)}</div>
         <div class="material-detail">${eh((isExtra ? item.notes : item.detail) || item.unit)}</div>
         <div class="stock-control">
-          <button class="btn btn-outline-secondary" type="button" data-stock-step="-1"><i class="bi bi-dash"></i></button>
-          <input class="form-control stock-input" type="number" min="0" step="0.01" value="${ea(inputQty(value))}" data-stock-input data-item-id="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" inputmode="decimal">
-          <button class="btn btn-outline-primary" type="button" data-stock-step="1"><i class="bi bi-plus"></i></button>
+          <button class="btn btn-outline-secondary" type="button" data-stock-step="-${stepAmount}"><i class="bi bi-dash"></i></button>
+          <input class="form-control stock-input" type="number" min="0" step="${inputStep}" value="${ea(inputQty(value))}" data-stock-input data-item-id="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" inputmode="decimal">
+          <button class="btn btn-outline-primary" type="button" data-stock-step="${stepAmount}"><i class="bi bi-plus"></i></button>
         </div>
+        ${fractional ? `<div class="fraction-presets" aria-label="Fracciones rápidas">${fractionValues.map((fractionValue, index) => `<button class="fraction-preset${Math.abs(Number(value) - fractionValue) < 0.001 ? ' active' : ''}" type="button" data-fraction-value="${fractionValue}">${fractionLabels[index]}</button>`).join('')}</div>` : ''}
         <div class="stock-unit">${eh(item.unit)}</div>
+        ${withCondition ? `<div class="condition-control"><div class="condition-control-label"><span>Estado del elemento</span><span data-condition-summary>${eh(conditionLabel(conditionStatus))}</span></div><div class="condition-options"><button class="condition-option${conditionStatus === 'good' ? ' active' : ''}" type="button" data-condition-value="good">Buen estado</button><button class="condition-option${conditionStatus === 'used' ? ' active' : ''}" type="button" data-condition-value="used">Usado</button><button class="condition-option${conditionStatus === 'replace' ? ' active' : ''}" type="button" data-condition-value="replace">Para reemplazar</button></div></div>` : ''}
         <div class="threshold-note">Crítico ≤ ${qty(item.critical_level)} · objetivo ${qty(item.target_level)}</div>
+        ${!isExtra && context === 'admin' ? `<button class="btn btn-sm ${enabled ? 'btn-outline-secondary' : 'btn-outline-success'} w-100 mt-3 material-visibility-button" type="button" data-toggle-service-material="${item.id}" data-service-id="${serviceId}"><i class="bi bi-${enabled ? 'eye-slash' : 'eye'} me-1"></i>${enabled ? 'Ocultar en este servicio' : 'Habilitar en este servicio'}</button>` : ''}
         ${isExtra && context === 'admin' ? `<button class="btn btn-sm btn-link text-danger w-100 mt-2" type="button" data-toggle-extra="${item.id}"><i class="bi bi-archive me-1"></i>Desactivar adicional</button>` : ''}
       </div>
     </article>`;
   }
 
   function appClick(event) {
+    const fractionButton = event.target.closest('[data-fraction-value]');
+    if (fractionButton) {
+      const card = fractionButton.closest('[data-item-card]');
+      const input = card?.querySelector('[data-stock-input]');
+      if (!card || !input) return;
+      const next = parseQty(fractionButton.dataset.fractionValue);
+      input.value = inputQty(next);
+      setItemDraft(card.dataset.itemType, card.dataset.serviceId, card.dataset.itemCard, next);
+      updateFractionPresets(card, next);
+      updateCardStatus(card, next, cardCondition(card));
+      renderDraftIndicator();
+      return;
+    }
+
+    const conditionButton = event.target.closest('[data-condition-value]');
+    if (conditionButton) {
+      const card = conditionButton.closest('[data-item-card]');
+      if (!card) return;
+      const conditionStatus = conditionButton.dataset.conditionValue;
+      setConditionDraft(card.dataset.serviceId, card.dataset.itemCard, conditionStatus);
+      updateConditionControl(card, conditionStatus);
+      const input = card.querySelector('[data-stock-input]');
+      updateCardStatus(card, parseQty(input?.value), conditionStatus);
+      renderDraftIndicator();
+      return;
+    }
+
     const stepButton = event.target.closest('[data-stock-step]');
     if (stepButton) {
       const card = stepButton.closest('[data-item-card]');
@@ -716,7 +787,8 @@
       const next = Math.max(0, parseQty(input.value) + Number(stepButton.dataset.stockStep));
       input.value = inputQty(next);
       setItemDraft(card.dataset.itemType, card.dataset.serviceId, card.dataset.itemCard, next);
-      updateCardStatus(card, next);
+      updateFractionPresets(card, next);
+      updateCardStatus(card, next, cardCondition(card));
       renderDraftIndicator();
       return;
     }
@@ -742,6 +814,13 @@
     const toggleMaterialButton = event.target.closest('[data-toggle-material]');
     if (toggleMaterialButton) return toggleMaterial(toggleMaterialButton.dataset.toggleMaterial);
 
+    const toggleServiceMaterialButton = event.target.closest('[data-toggle-service-material]');
+    if (toggleServiceMaterialButton) return toggleServiceMaterialVisibility(
+      toggleServiceMaterialButton.dataset.serviceId,
+      toggleServiceMaterialButton.dataset.toggleServiceMaterial,
+      toggleServiceMaterialButton
+    );
+
     const toggleExtraButton = event.target.closest('[data-toggle-extra]');
     if (toggleExtraButton) return toggleExtra(toggleExtraButton.dataset.toggleExtra);
 
@@ -755,15 +834,38 @@
     const card = input.closest('[data-item-card]');
     const value = Math.max(0, parseQty(input.value));
     setItemDraft(input.dataset.itemType, input.dataset.serviceId, input.dataset.itemId, value);
-    updateCardStatus(card, value);
+    updateFractionPresets(card, value);
+    updateCardStatus(card, value, cardCondition(card));
     renderDraftIndicator();
   }
 
-  function updateCardStatus(card, value) {
+  function cardCondition(card) {
+    return card?.dataset.conditionStatus || null;
+  }
+
+  function updateFractionPresets(card, value) {
+    if (!card) return;
+    card.querySelectorAll('[data-fraction-value]').forEach((button) => {
+      button.classList.toggle('active', Math.abs(parseQty(button.dataset.fractionValue) - Number(value)) < 0.001);
+    });
+  }
+
+  function updateConditionControl(card, conditionStatus) {
+    if (!card) return;
+    card.dataset.conditionStatus = conditionStatus || '';
+    card.classList.toggle('condition-replace', conditionStatus === 'replace');
+    card.querySelectorAll('[data-condition-value]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.conditionValue === conditionStatus);
+    });
+    const summaryElement = card.querySelector('[data-condition-summary]');
+    if (summaryElement) summaryElement.textContent = conditionLabel(conditionStatus);
+  }
+
+  function updateCardStatus(card, value, conditionStatus = null) {
     if (!card) return;
     const item = card.dataset.itemType === 'extra' ? extra(card.dataset.itemCard) : material(card.dataset.itemCard);
     if (!item) return;
-    const status = stockStatus(value, item);
+    const status = stockStatus(value, item, conditionStatus);
     card.classList.remove('status-unreported', 'status-critical', 'status-low', 'status-ok');
     card.classList.add(`status-${status}`);
     const label = card.querySelector('[data-status-label]');
@@ -783,6 +885,14 @@
     return S.stockDrafts.get(`${serviceId}:${materialId}`);
   }
 
+  function setConditionDraft(serviceId, materialId, value) {
+    S.conditionDrafts.set(`${serviceId}:${materialId}`, value || null);
+  }
+
+  function conditionDraft(serviceId, materialId) {
+    return S.conditionDrafts.get(`${serviceId}:${materialId}`);
+  }
+
   function extraDraft(serviceId, extraId) {
     return S.extraDrafts.get(`${serviceId}:${extraId}`);
   }
@@ -790,25 +900,27 @@
   function hasPendingDrafts(serviceId) {
     if (!serviceId) return false;
     const prefix = `${serviceId}:`;
-    return [...S.stockDrafts.keys(), ...S.extraDrafts.keys()].some((key) => key.startsWith(prefix));
+    return [...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.extraDrafts.keys()].some((key) => key.startsWith(prefix));
   }
 
   function clearDrafts(serviceId) {
     if (!serviceId) return;
     const prefix = `${serviceId}:`;
     [...S.stockDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.stockDrafts.delete(key); });
+    [...S.conditionDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.conditionDrafts.delete(key); });
     [...S.extraDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.extraDrafts.delete(key); });
   }
 
   function clearAllDrafts() {
     S.stockDrafts.clear();
+    S.conditionDrafts.clear();
     S.extraDrafts.clear();
   }
 
   function renderDraftIndicator() {
     const serviceId = currentServiceId();
     const prefix = `${serviceId}:`;
-    const count = [...S.stockDrafts.keys(), ...S.extraDrafts.keys()].filter((key) => key.startsWith(prefix)).length;
+    const count = new Set([...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.extraDrafts.keys()].filter((key) => key.startsWith(prefix))).size;
     E.operatorDraftCount.textContent = `${count} cambio${count === 1 ? '' : 's'} pendiente${count === 1 ? '' : 's'}`;
   }
 
@@ -818,12 +930,17 @@
     buttonBusy(button, true, 'Guardando...');
 
     try {
-      const stockItems = activeMaterials().map((item) => {
+      const inventoryMaterials = S.mode === 'admin' ? activeMaterials() : serviceMaterials(serviceId);
+      const stockItems = inventoryMaterials.map((item) => {
         const currentStock = stock(serviceId, item.id);
         const pending = stockDraft(serviceId, item.id);
+        const pendingCondition = conditionDraft(serviceId, item.id);
         return {
           material_id: item.id,
-          quantity: pending !== undefined ? pending : (currentStock?.quantity ?? 0)
+          quantity: pending !== undefined ? pending : (currentStock?.quantity ?? 0),
+          condition_status: item.control_type === 'quantity_condition'
+            ? (pendingCondition !== undefined ? pendingCondition : (currentStock?.condition_status ?? null))
+            : null
         };
       });
 
@@ -850,6 +967,7 @@
           service_id: serviceId,
           material_id: item.material_id,
           quantity: item.quantity,
+          condition_status: item.condition_status,
           updated_by: S.session.user.id,
           updated_at: new Date().toISOString()
         }));
@@ -959,6 +1077,177 @@
     }
   }
 
+  function renderExport() {
+    if (S.mode !== 'admin') return;
+    renderExportServices();
+    updateExportSelectionCount();
+  }
+
+  function renderExportServices() {
+    if (S.mode !== 'admin') return;
+    const query = norm(E.exportServiceSearch.value);
+    const services = S.services.filter((item) => !query || norm(`${item.name} ${item.address || ''}`).includes(query));
+    E.exportServiceList.innerHTML = services.length ? services.map((item) => (
+      `<label class="export-service-option"><input class="form-check-input" type="checkbox" value="${item.id}" data-export-service ${S.exportServiceIds.has(item.id) ? 'checked' : ''}><span><span class="export-service-name">${eh(item.name)}${item.active ? '' : ' <span class="badge text-bg-secondary ms-1">Inactivo</span>'}</span><span class="export-service-address d-block">${eh(item.address || 'Sin dirección')}</span></span></label>`
+    )).join('') : empty('No hay servicios que coincidan.');
+    updateExportSelectionCount();
+  }
+
+  function handleExportServiceSelection(event) {
+    const checkbox = event.target.closest('[data-export-service]');
+    if (!checkbox) return;
+    if (checkbox.checked) S.exportServiceIds.add(checkbox.value);
+    else S.exportServiceIds.delete(checkbox.value);
+    updateExportSelectionCount();
+  }
+
+  function selectAllExportServices() {
+    S.services.forEach((item) => S.exportServiceIds.add(item.id));
+    renderExportServices();
+  }
+
+  function clearExportServices() {
+    S.exportServiceIds.clear();
+    renderExportServices();
+    E.exportPreviewSummary.textContent = 'No hay servicios seleccionados.';
+    E.exportPreviewBody.innerHTML = tableEmpty(7, 'Seleccioná al menos un servicio.');
+  }
+
+  function updateExportSelectionCount() {
+    const count = selectedExportServices().length;
+    E.exportSelectedCount.textContent = `${count} servicio${count === 1 ? '' : 's'} seleccionado${count === 1 ? '' : 's'}`;
+    E.exportPreviewButton.disabled = count === 0;
+    E.exportDownloadButton.disabled = count === 0;
+  }
+
+  function selectedExportServices() {
+    return S.services.filter((item) => S.exportServiceIds.has(item.id)).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }
+
+  function buildExportDetailRows() {
+    const rows = [];
+    selectedExportServices().forEach((currentService) => {
+      serviceMaterials(currentService.id).forEach((item) => {
+        const currentStock = stock(currentService.id, item.id);
+        const status = currentStock ? stockStatus(currentStock.quantity, item, currentStock.condition_status) : 'unreported';
+        rows.push({
+          service_id: currentService.id,
+          service_name: currentService.name,
+          address: currentService.address || '',
+          description: currentService.description || '',
+          service_active: currentService.active !== false,
+          item_key: `material:${item.id}`,
+          item_name: item.name,
+          category: item.category || '',
+          quantity: currentStock ? Number(currentStock.quantity) : null,
+          unit: item.unit || '',
+          condition_status: item.control_type === 'quantity_condition' ? (currentStock?.condition_status || null) : null,
+          stock_status: status,
+          item_type: 'Catálogo',
+          updated_at: currentStock?.updated_at || null,
+          control_type: item.control_type || 'integer'
+        });
+      });
+      activeExtras(currentService.id).forEach((item) => {
+        rows.push({
+          service_id: currentService.id,
+          service_name: currentService.name,
+          address: currentService.address || '',
+          description: currentService.description || '',
+          service_active: currentService.active !== false,
+          item_key: `extra:${norm(item.name)}`,
+          item_name: item.name,
+          category: 'Agregado por operario',
+          quantity: Number(item.quantity),
+          unit: item.unit || '',
+          condition_status: null,
+          stock_status: stockStatus(item.quantity, item),
+          item_type: 'Adicional',
+          updated_at: item.updated_at || null,
+          control_type: 'decimal'
+        });
+      });
+    });
+    return rows.sort((a, b) => a.service_name.localeCompare(b.service_name, 'es') || a.category.localeCompare(b.category, 'es') || a.item_name.localeCompare(b.item_name, 'es'));
+  }
+
+  function renderExportPreview() {
+    const rows = buildExportDetailRows();
+    if (!rows.length) {
+      E.exportPreviewSummary.textContent = 'No hay inventario disponible para la selección.';
+      E.exportPreviewBody.innerHTML = tableEmpty(7, 'No hay registros para mostrar.');
+      return;
+    }
+    const selectedCount = selectedExportServices().length;
+    const reportedCount = rows.filter((row) => row.quantity !== null).length;
+    E.exportPreviewSummary.textContent = `${selectedCount} servicio${selectedCount === 1 ? '' : 's'} · ${rows.length} posiciones · ${reportedCount} informadas`;
+    E.exportPreviewBody.innerHTML = rows.map((row) => (
+      `<tr><td><div class="table-title">${eh(row.service_name)}</div><div class="table-subtitle">${eh(row.address || 'Sin dirección')}</div></td><td><div class="table-title">${eh(row.item_name)}</div><div class="table-subtitle">${eh(row.category)}${row.item_type === 'Adicional' ? ' · adicional' : ''}</div></td><td class="export-quantity">${row.quantity === null ? 'Sin informar' : qty(row.quantity)}</td><td>${eh(row.unit)}</td><td>${row.control_type === 'quantity_condition' ? conditionChip(row.condition_status) : '—'}</td><td><span class="stock-state-text ${row.stock_status}">${eh(stockStatusLabel(row.stock_status))}</span></td><td class="text-nowrap">${eh(fmt(row.updated_at))}</td></tr>`
+    )).join('');
+  }
+
+  function downloadStockExcel() {
+    if (!window.XLSX) return toast('No se pudo cargar el módulo de Excel. Revisá la conexión e intentá nuevamente.', 'error');
+    const services = selectedExportServices();
+    if (!services.length) return toast('Seleccioná al menos un servicio.', 'error');
+    const rows = buildExportDetailRows();
+    if (!rows.length) return toast('No hay datos disponibles para exportar.', 'error');
+
+    const detailData = rows.map((row) => ({
+      'Servicio': row.service_name,
+      'Dirección': row.address,
+      'Frecuencia / descripción': row.description,
+      'Estado del servicio': row.service_active ? 'Activo' : 'Inactivo',
+      'Insumo': row.item_name,
+      'Categoría': row.category,
+      'Cantidad': row.quantity,
+      'Unidad': row.unit,
+      'Estado del elemento': conditionLabel(row.condition_status, true),
+      'Estado de stock': stockStatusLabel(row.stock_status),
+      'Tipo': row.item_type,
+      'Última actualización': row.updated_at ? fmt(row.updated_at) : ''
+    }));
+
+    const columnDefinitions = new Map();
+    rows.forEach((row) => {
+      if (!columnDefinitions.has(row.item_key)) columnDefinitions.set(row.item_key, { key: row.item_key, name: row.item_name, condition: row.control_type === 'quantity_condition' });
+    });
+    const columns = [...columnDefinitions.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    const rowIndex = new Map(rows.map((row) => [`${row.service_id}|${row.item_key}`, row]));
+    const matrixData = services.map((currentService) => {
+      const record = {
+        'Servicio': currentService.name,
+        'Dirección': currentService.address || '',
+        'Frecuencia / descripción': currentService.description || '',
+        'Estado del servicio': currentService.active ? 'Activo' : 'Inactivo',
+        'Último relevamiento': summary(currentService.id).last ? fmt(summary(currentService.id).last) : ''
+      };
+      columns.forEach((column) => {
+        const row = rowIndex.get(`${currentService.id}|${column.key}`);
+        const isMasterMaterial = column.key.startsWith('material:');
+        record[column.name] = row ? (row.quantity ?? '') : (isMasterMaterial ? 'No aplica' : '');
+        if (column.condition) record[`${column.name} - Estado`] = row ? conditionLabel(row.condition_status, true) : '';
+      });
+      return record;
+    });
+
+    const workbook = XLSX.utils.book_new();
+    const matrixSheet = XLSX.utils.json_to_sheet(matrixData);
+    matrixSheet['!autofilter'] = { ref: matrixSheet['!ref'] };
+    matrixSheet['!cols'] = Object.keys(matrixData[0] || {}).map((key) => ({ wch: Math.min(34, Math.max(12, key.length + 2)) }));
+    const detailSheet = XLSX.utils.json_to_sheet(detailData);
+    detailSheet['!autofilter'] = { ref: detailSheet['!ref'] };
+    detailSheet['!cols'] = [
+      { wch: 34 }, { wch: 28 }, { wch: 42 }, { wch: 18 }, { wch: 34 }, { wch: 22 },
+      { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 22 }
+    ];
+    XLSX.utils.book_append_sheet(workbook, matrixSheet, 'Stock por servicio');
+    XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalle');
+    const date = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `stock-cleanit-${date}.xlsx`, { compression: true });
+    toast('Excel generado correctamente.', 'success');
+  }
+
   function renderMaterials() {
     if (S.mode !== 'admin') return;
     const query = norm(E.materialsSearch.value);
@@ -969,8 +1258,8 @@
     ));
 
     E.materialsTableBody.innerHTML = items.length ? items.map((item) => (
-      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`
-    )).join('') : tableEmpty(7, 'No hay insumos que coincidan.');
+      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td><span class="control-type-badge">${eh(controlTypeLabel(item.control_type))}</span></td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`
+    )).join('') : tableEmpty(8, 'No hay insumos que coincidan.');
   }
 
   function renderServices() {
@@ -997,6 +1286,8 @@
       item_name: material(item.material_id)?.name || 'Insumo eliminado',
       old_quantity: item.old_quantity,
       new_quantity: item.new_quantity,
+      old_condition: item.old_condition,
+      new_condition: item.new_condition,
       changed_by: item.changed_by,
       reporter_name: item.reporter_name,
       extra: false
@@ -1007,6 +1298,8 @@
       item_name: item.extra_name || extra(item.extra_stock_id)?.name || 'Adicional eliminado',
       old_quantity: item.old_quantity,
       new_quantity: item.new_quantity,
+      old_condition: null,
+      new_condition: null,
       changed_by: item.changed_by,
       reporter_name: item.reporter_name,
       extra: true
@@ -1017,7 +1310,8 @@
 
     E.historyTableBody.innerHTML = rows.length ? rows.map((item) => {
       const responsible = profile(item.changed_by)?.full_name || item.reporter_name || 'Sistema';
-      return `<tr><td class="text-nowrap">${eh(fmt(item.changed_at))}</td><td>${eh(service(item.service_id)?.name || 'Servicio eliminado')}</td><td>${eh(item.item_name)}${item.extra ? ' <span class="badge text-bg-light border">adicional</span>' : ''}</td><td><strong>${item.old_quantity === null ? '—' : qty(item.old_quantity)} → ${qty(item.new_quantity)}</strong></td><td>${eh(responsible)}</td></tr>`;
+      const conditionChange = item.old_condition !== item.new_condition && (item.old_condition || item.new_condition);
+      return `<tr><td class="text-nowrap">${eh(fmt(item.changed_at))}</td><td>${eh(service(item.service_id)?.name || 'Servicio eliminado')}</td><td>${eh(item.item_name)}${item.extra ? ' <span class="badge text-bg-light border">adicional</span>' : ''}</td><td><strong>${item.old_quantity === null ? '—' : qty(item.old_quantity)} → ${qty(item.new_quantity)}</strong>${conditionChange ? `<div class="table-subtitle">Estado: ${eh(conditionLabel(item.old_condition))} → ${eh(conditionLabel(item.new_condition))}</div>` : ''}</td><td>${eh(responsible)}</td></tr>`;
     }).join('') : tableEmpty(5, 'No hay movimientos registrados.');
   }
 
@@ -1070,6 +1364,7 @@
     E.materialCategory.value = item?.category || '';
     E.materialDetail.value = item?.detail || '';
     E.materialUnit.value = item?.unit || 'unidad';
+    E.materialControlType.value = item?.control_type || 'integer';
     E.materialCritical.value = item?.critical_level ?? 0;
     E.materialTarget.value = item?.target_level ?? 1;
     E.materialSort.value = item?.sort_order ?? 100;
@@ -1112,6 +1407,7 @@
         category: E.materialCategory.value.trim(),
         detail: E.materialDetail.value.trim() || null,
         unit: E.materialUnit.value.trim(),
+        control_type: E.materialControlType.value,
         critical_level: parseQty(E.materialCritical.value),
         target_level: parseQty(E.materialTarget.value),
         sort_order: Math.max(0, parseInt(E.materialSort.value || '100', 10)),
@@ -1147,6 +1443,45 @@
     if (error) return toast(error.message, 'error');
     await refreshAdmin(false);
     toast(`Insumo ${item.active ? 'desactivado' : 'activado'}.`, 'success');
+  }
+
+
+  async function toggleServiceMaterialVisibility(serviceId, materialId, button) {
+    if (S.mode !== 'admin' || !serviceId || !materialId) return;
+    const item = material(materialId);
+    const selectedService = service(serviceId);
+    if (!item || !selectedService) return;
+
+    const currentlyEnabled = isMaterialEnabled(serviceId, materialId);
+    buttonBusy(button, true, currentlyEnabled ? 'Ocultando...' : 'Habilitando...');
+    try {
+      const { error } = await S.sb.from('service_material_visibility').upsert({
+        service_id: serviceId,
+        material_id: materialId,
+        enabled: !currentlyEnabled,
+        updated_by: S.session.user.id,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'service_id,material_id' });
+      if (error) throw error;
+
+      const existing = S.materialVisibility.find((row) => row.service_id === serviceId && row.material_id === materialId);
+      if (existing) {
+        existing.enabled = !currentlyEnabled;
+        existing.updated_by = S.session.user.id;
+        existing.updated_at = new Date().toISOString();
+      } else {
+        S.materialVisibility.push({ service_id: serviceId, material_id: materialId, enabled: !currentlyEnabled });
+      }
+
+      renderAdminInventory();
+      renderDashboard();
+      toast(`${item.name} ${currentlyEnabled ? 'quedó oculto' : 'volvió a estar visible'} en ${selectedService.name}.`, 'success');
+    } catch (error) {
+      console.error(error);
+      toast(error.message || 'No se pudo cambiar la visibilidad del insumo.', 'error');
+    } finally {
+      buttonBusy(button, false);
+    }
   }
 
   async function toggleExtra(id) {
@@ -1189,6 +1524,15 @@
     return S.materials.filter((item) => item.active);
   }
 
+  function isMaterialEnabled(serviceId, materialId) {
+    const setting = S.materialVisibility.find((item) => item.service_id === serviceId && item.material_id === materialId);
+    return setting ? setting.enabled !== false : true;
+  }
+
+  function serviceMaterials(serviceId) {
+    return activeMaterials().filter((item) => isMaterialEnabled(serviceId, item.id));
+  }
+
   function activeExtras(serviceId) {
     return S.extraStocks.filter((item) => item.service_id === serviceId && item.active !== false);
   }
@@ -1220,13 +1564,13 @@
     let unreported = 0;
     let last = null;
 
-    activeMaterials().forEach((item) => {
+    serviceMaterials(serviceId).forEach((item) => {
       const currentStock = stock(serviceId, item.id);
       if (!currentStock) {
         unreported += 1;
         return;
       }
-      const status = stockStatus(currentStock.quantity, item);
+      const status = stockStatus(currentStock.quantity, item, currentStock.condition_status);
       if (status === 'critical') critical += 1;
       if (status === 'low') low += 1;
       if (status === 'ok') ok += 1;
@@ -1252,13 +1596,32 @@
     return !current || date > current ? date : current;
   }
 
-  function stockStatus(value, item) {
+  function stockStatus(value, item, conditionStatus = null) {
     const quantityValue = Number(value) || 0;
     const critical = Number(item.critical_level) || 0;
     const target = Number(item.target_level) || 0;
+    if ((item.control_type || 'integer') === 'quantity_condition' && conditionStatus === 'replace' && quantityValue > 0) return 'critical';
     if (quantityValue <= critical) return 'critical';
     if (quantityValue < target) return 'low';
     return 'ok';
+  }
+
+  function conditionLabel(value, emptyAsBlank = false) {
+    const labels = { good: 'Buen estado', used: 'Usado', replace: 'Para reemplazar' };
+    return labels[value] || (emptyAsBlank ? '' : 'Sin informar');
+  }
+
+  function conditionChip(value) {
+    const className = value || 'none';
+    return `<span class="condition-chip ${className}">${eh(conditionLabel(value))}</span>`;
+  }
+
+  function controlTypeLabel(value) {
+    return ({ integer: 'Cantidad entera', fractional: 'Fraccionable', quantity_condition: 'Cantidad + estado' })[value] || 'Cantidad entera';
+  }
+
+  function stockStatusLabel(value) {
+    return ({ unreported: 'Sin informar', critical: 'Crítico', low: 'Bajo', ok: 'Correcto' })[value] || 'Sin informar';
   }
 
   function parseQty(value) {

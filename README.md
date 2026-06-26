@@ -1,30 +1,82 @@
-# Stock Clean It · servicios y frecuencias
+# Stock Clean It · inventario por servicio
 
 Web app responsive para controlar el stock de insumos por consorcio o servicio, desarrollada con HTML, CSS, JavaScript, Bootstrap y Supabase.
 
 ## Incluye esta versión
 
 - Acceso público sin usuario ni contraseña para operarios.
-- La aplicación siempre abre en la vista pública, aunque exista una sesión administrativa guardada.
-- El operario sólo selecciona el servicio, escribe su nombre y continúa.
-- Selector con **sólo el nombre del servicio**.
+- El operario selecciona el servicio, escribe su nombre y continúa.
+- Selector público con únicamente el nombre del servicio.
 - Descripción y frecuencia visible después de seleccionar el servicio.
-- Edición de nombre, dirección, descripción/frecuencia, observaciones y estado desde Administración.
-- 64 servicios de Clean It precargados desde el archivo operativo del 23/06/2026.
+- 64 servicios de Clean It precargados.
+- Visibilidad individual de insumos por servicio.
 - Carga rápida de insumos no listados.
+- Cantidades enteras para insumos comunes.
+- Cantidades fraccionables con accesos rápidos `0`, `¼`, `½`, `¾` y `1` para bidones.
+- Control de estado para elementos reutilizables: **Buen estado**, **Usado** o **Para reemplazar**.
+- Los elementos marcados como **Para reemplazar** se consideran críticos aunque la cantidad sea alta.
+- Exportación Excel de uno, varios o todos los servicios.
+- Vista previa administrativa antes de descargar.
+- Excel con dos hojas: matriz **Stock por servicio** y listado **Detalle**.
 - Inventario en vivo, alertas, historial y Supabase Realtime.
-- 35 insumos iniciales de Clean It.
-- Políticas RLS y funciones RPC: el acceso anónimo no abre las tablas completas.
+- Políticas RLS y funciones RPC para mantener controlado el acceso público.
 
-## Actualizar la instalación existente
+## Actualizar una instalación existente
 
 1. Abrir **Supabase → SQL Editor**.
-2. Ejecutar primero `supabase-schema.sql`.
-3. Ejecutar `actualizar-servicios.sql`.
+2. Ejecutar `actualizar-fracciones-estados-exportacion.sql`.
+3. Reemplazar los archivos del repositorio de GitHub por los incluidos en este paquete.
+4. Publicar nuevamente GitHub Pages.
 
-El segundo archivo carga o actualiza los 64 servicios, sus direcciones y sus frecuencias, los deja activos y elimina `Consorcio Demo` sólo cuando no tiene datos relacionados.
+La migración conserva servicios, cantidades, usuarios, imágenes, configuraciones de visibilidad e historial existentes.
 
-La lista de respaldo también está disponible en `servicios-precargados.json`.
+Para una instalación nueva, ejecutar directamente `supabase-schema.sql`.
+
+## Tipos de control por insumo
+
+En la app:
+
+**Administración → Insumos → Editar**
+
+Cada insumo puede configurarse como:
+
+- **Cantidad entera:** escobas, guantes, bolsas, pulverizadores, etc.
+- **Cantidad fraccionable:** bidones u otros consumibles que pueden quedar a ¼, ½ o ¾.
+- **Cantidad + estado:** trapos, rejillas, microfibras y otros elementos reutilizables.
+
+La migración configura inicialmente como fraccionables los principales bidones y como “cantidad + estado” los paños y fibras más habituales. Después puede modificarse cualquier insumo desde Administración.
+
+## Exportar inventario
+
+En la app:
+
+**Administración → Exportar stock**
+
+1. Seleccionar uno, varios o todos los servicios.
+2. Presionar **Ver lista** para revisar los datos.
+3. Presionar **Descargar Excel**.
+
+El archivo incluye:
+
+- **Stock por servicio:** una fila por servicio y una columna por insumo.
+- **Detalle:** una fila por cada combinación de servicio e insumo, con cantidad, unidad, estado del elemento, estado de stock y fecha de actualización.
+
+Los insumos ocultos para un servicio no se incluyen en su exportación. Los faltantes de relevamiento aparecen como **Sin informar**, diferenciados de una cantidad informada en cero.
+
+## Visibilidad de insumos por servicio
+
+En la app:
+
+**Administración → Inventario → seleccionar servicio**
+
+Cada tarjeta incluye el botón **Ocultar en este servicio** o **Habilitar en este servicio**. La configuración afecta únicamente al servicio seleccionado.
+
+Los insumos ocultos:
+
+- No aparecen en la vista pública.
+- No se contabilizan como pendientes, críticos o bajos.
+- Siguen disponibles en Administración para volver a habilitarlos.
+- Conservan el stock y el historial previamente registrado.
 
 ## Instalación nueva
 
@@ -42,25 +94,19 @@ where email = 'TU-CORREO@DOMINIO.COM';
 5. Editar `config.js` con la URL y la clave pública `anon` del proyecto.
 6. Subir todos los archivos a GitHub y activar GitHub Pages.
 
-## Edición de frecuencias
-
-En la app:
-
-**Administración → Servicios → lápiz**
-
-El campo **Descripción o frecuencia** se muestra al operario únicamente después de elegir el servicio. En el selector se mantiene solamente el nombre para que la búsqueda sea rápida.
-
 ## Archivos principales
 
-- `index.html`: interfaz.
-- `styles.css`: diseño.
-- `app.js`: lógica pública y administrativa.
+- `index.html`: interfaz pública y administrativa.
+- `styles.css`: diseño responsive.
+- `app.js`: lógica de inventario, estados y exportación.
 - `config.js`: conexión con Supabase.
-- `supabase-schema.sql`: estructura completa y carga segura inicial.
-- `actualizar-servicios.sql`: actualización masiva para la instalación existente.
-- `servicios-precargados.json`: respaldo legible de los servicios y frecuencias.
-- `seed-materials.json`: catálogo inicial de insumos.
+- `supabase-schema.sql`: instalación completa.
+- `actualizar-fracciones-estados-exportacion.sql`: migración puntual para esta versión.
+- `actualizar-servicios.sql`: actualización masiva de servicios y frecuencias.
+- `actualizar-visibilidad-insumos.sql`: migración de visibilidad por servicio.
+- `servicios-precargados.json`: respaldo de servicios y frecuencias.
+- `seed-materials.json`: catálogo inicial y tipos de control.
 
 ## Seguridad
 
-La carga pública utiliza funciones RPC `security definer`. Los operarios pueden consultar servicios activos y actualizar inventarios, pero no pueden consultar perfiles, historial administrativo ni notas internas.
+La carga pública utiliza funciones RPC `security definer`. Los operarios pueden consultar servicios activos y actualizar el inventario del servicio elegido, pero no pueden acceder a perfiles, historial administrativo ni observaciones internas.

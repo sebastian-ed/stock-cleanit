@@ -9,7 +9,8 @@
     "target_level": 1,
     "sort_order": 10,
     "image_url": "assets/materials/detergente-bio-ultra.svg",
-    "active": true
+    "active": true,
+    "control_type": "fractional"
   },
   {
     "slug": "perfume-flower",
@@ -21,7 +22,8 @@
     "target_level": 1,
     "sort_order": 20,
     "image_url": "assets/materials/perfume-flower.svg",
-    "active": true
+    "active": true,
+    "control_type": "fractional"
   },
   {
     "slug": "lavandina-bio-lav",
@@ -33,7 +35,8 @@
     "target_level": 1,
     "sort_order": 30,
     "image_url": "assets/materials/lavandina-bio-lav.svg",
-    "active": true
+    "active": true,
+    "control_type": "fractional"
   },
   {
     "slug": "rapid-plus-gel",
@@ -45,7 +48,8 @@
     "target_level": 1,
     "sort_order": 40,
     "image_url": "assets/materials/rapid-plus-gel.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "wood-thames",
@@ -57,7 +61,8 @@
     "target_level": 1,
     "sort_order": 50,
     "image_url": "assets/materials/wood-thames.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "steel-shine",
@@ -69,7 +74,8 @@
     "target_level": 1,
     "sort_order": 60,
     "image_url": "assets/materials/steel-shine.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "cream-thames",
@@ -81,7 +87,8 @@
     "target_level": 1,
     "sort_order": 70,
     "image_url": "assets/materials/cream-thames.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "sarro-attack",
@@ -93,7 +100,8 @@
     "target_level": 1,
     "sort_order": 80,
     "image_url": "assets/materials/sarro-attack.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "smell-thames",
@@ -105,7 +113,8 @@
     "target_level": 3,
     "sort_order": 90,
     "image_url": "assets/materials/smell-thames.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "alcohol-al70",
@@ -117,7 +126,8 @@
     "target_level": 1,
     "sort_order": 100,
     "image_url": "assets/materials/alcohol-al70.svg",
-    "active": true
+    "active": true,
+    "control_type": "fractional"
   },
   {
     "slug": "bolsas-negras-45-60",
@@ -129,7 +139,8 @@
     "target_level": 1,
     "sort_order": 110,
     "image_url": "assets/materials/bolsas-negras-45-60.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "bolsas-verdes-45-60",
@@ -141,7 +152,8 @@
     "target_level": 1,
     "sort_order": 120,
     "image_url": "assets/materials/bolsas-verdes-45-60.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "bolsas-negras-70-50",
@@ -153,7 +165,8 @@
     "target_level": 1,
     "sort_order": 130,
     "image_url": "assets/materials/bolsas-negras-70-50.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "bolsas-verdes-70-50",
@@ -165,7 +178,8 @@
     "target_level": 1,
     "sort_order": 140,
     "image_url": "assets/materials/bolsas-verdes-70-50.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "bolsas-negras-90-110",
@@ -177,7 +191,8 @@
     "target_level": 1,
     "sort_order": 150,
     "image_url": "assets/materials/bolsas-negras-90-110.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "bolsas-verdes-90-110",
@@ -189,7 +204,8 @@
     "target_level": 1,
     "sort_order": 160,
     "image_url": "assets/materials/bolsas-verdes-90-110.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "guantes-mapa-8",
@@ -201,7 +217,8 @@
     "target_level": 1,
     "sort_order": 170,
     "image_url": "assets/materials/guantes-mapa-8.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "balde-reforzado",
@@ -213,7 +230,8 @@
     "target_level": 1,
     "sort_order": 180,
     "image_url": "assets/materials/balde-reforzado.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "pulverizador-gatillo",
@@ -225,7 +243,8 @@
     "target_level": 2,
     "sort_order": 190,
     "image_url": "assets/materials/pulverizador-gatillo.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "medidor",
@@ -237,7 +256,8 @@
     "target_level": 1,
     "sort_order": 200,
     "image_url": "assets/materials/medidor.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "embudo-mediano",
@@ -249,7 +269,8 @@
     "target_level": 1,
     "sort_order": 210,
     "image_url": "assets/materials/embudo-mediano.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "escoba-cabo",
@@ -261,7 +282,8 @@
     "target_level": 2,
     "sort_order": 220,
     "image_url": "assets/materials/escoba-cabo.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "escobillon-cochera",
@@ -273,7 +295,8 @@
     "target_level": 1,
     "sort_order": 230,
     "image_url": "assets/materials/escobillon-cochera.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "pala-cabo",
@@ -285,7 +308,8 @@
     "target_level": 1,
     "sort_order": 240,
     "image_url": "assets/materials/pala-cabo.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "secador-cabo",
@@ -297,7 +321,8 @@
     "target_level": 1,
     "sort_order": 250,
     "image_url": "assets/materials/secador-cabo.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "trapo-piso",
@@ -309,7 +334,8 @@
     "target_level": 2,
     "sort_order": 260,
     "image_url": "assets/materials/trapo-piso.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "rejilla",
@@ -321,7 +347,8 @@
     "target_level": 2,
     "sort_order": 270,
     "image_url": "assets/materials/rejilla.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "microfibra",
@@ -333,7 +360,8 @@
     "target_level": 2,
     "sort_order": 280,
     "image_url": "assets/materials/microfibra.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "fibra-verde",
@@ -345,7 +373,8 @@
     "target_level": 2,
     "sort_order": 290,
     "image_url": "assets/materials/fibra-verde.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "esponja-acero",
@@ -357,7 +386,8 @@
     "target_level": 2,
     "sort_order": 300,
     "image_url": "assets/materials/esponja-acero.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "esponja-amarilla",
@@ -369,7 +399,8 @@
     "target_level": 2,
     "sort_order": 310,
     "image_url": "assets/materials/esponja-amarilla.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "plumero-microfibra",
@@ -381,7 +412,8 @@
     "target_level": 1,
     "sort_order": 320,
     "image_url": "assets/materials/plumero-microfibra.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "ballerina",
@@ -393,7 +425,8 @@
     "target_level": 2,
     "sort_order": 330,
     "image_url": "assets/materials/ballerina.svg",
-    "active": true
+    "active": true,
+    "control_type": "quantity_condition"
   },
   {
     "slug": "kit-vidrios",
@@ -405,7 +438,8 @@
     "target_level": 1,
     "sort_order": 340,
     "image_url": "assets/materials/kit-vidrios.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   },
   {
     "slug": "globo-telaranas",
@@ -417,6 +451,7 @@
     "target_level": 1,
     "sort_order": 350,
     "image_url": "assets/materials/globo-telaranas.svg",
-    "active": true
+    "active": true,
+    "control_type": "integer"
   }
 ]
