@@ -720,11 +720,11 @@
     const controlType = isExtra ? 'decimal' : (item.control_type || 'integer');
     const fractional = controlType === 'fractional';
     const withCondition = controlType === 'quantity_condition';
-    const inputStep = fractional ? '0.25' : (isExtra ? '0.01' : '1');
-    const stepAmount = fractional ? 0.25 : 1;
+    const inputStep = fractional ? '0.5' : (isExtra ? '0.01' : '1');
+    const stepAmount = fractional ? 0.5 : 1;
     const conditionClass = withCondition && conditionStatus === 'replace' ? ' condition-replace' : '';
-    const fractionValues = [0, 0.25, 0.5, 0.75, 1];
-    const fractionLabels = ['0', '¼', '½', '¾', '1'];
+    const fractionValues = [0, 0.5, 1];
+    const fractionLabels = ['0', '½', '1'];
     return `<article class="material-card status-${status}${isExtra ? ' extra-material-card' : ''}${hiddenForOperator ? ' material-hidden-for-operator' : ''}${conditionClass}" data-item-card="${item.id}" data-item-type="${type}" data-service-id="${serviceId}" data-context="${context}" data-control-type="${controlType}" data-condition-status="${ea(conditionStatus || '')}">
       <div class="material-image-wrap">
         <img class="material-image" src="${ea(image)}" alt="${ea(item.name)}" loading="lazy" onerror="this.src='assets/materials/default.svg'">

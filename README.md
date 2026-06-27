@@ -12,7 +12,7 @@ Web app responsive para controlar el stock de insumos por consorcio o servicio, 
 - Visibilidad individual de insumos por servicio.
 - Carga rápida de insumos no listados.
 - Cantidades enteras para insumos comunes.
-- Cantidades fraccionables con accesos rápidos `0`, `¼`, `½`, `¾` y `1` para bidones.
+- Cantidades fraccionables con accesos rápidos `0`, `½` y `1` para bidones.
 - Control de estado para elementos reutilizables: **Buen estado**, **Usado** o **Para reemplazar**.
 - Los elementos marcados como **Para reemplazar** se consideran críticos aunque la cantidad sea alta.
 - Exportación Excel de uno, varios o todos los servicios.
@@ -23,12 +23,9 @@ Web app responsive para controlar el stock de insumos por consorcio o servicio, 
 
 ## Actualizar una instalación existente
 
-1. Abrir **Supabase → SQL Editor**.
-2. Ejecutar `actualizar-fracciones-estados-exportacion.sql`.
-3. Reemplazar los archivos del repositorio de GitHub por los incluidos en este paquete.
-4. Publicar nuevamente GitHub Pages.
+Si ya ejecutaste la migración de fracciones, estados y exportación de la versión anterior, esta mejora no requiere cambios en Supabase. Sólo reemplazá los archivos del repositorio de GitHub por los incluidos en este paquete y publicá nuevamente GitHub Pages.
 
-La migración conserva servicios, cantidades, usuarios, imágenes, configuraciones de visibilidad e historial existentes.
+Si venís de una versión más vieja, primero ejecutá `actualizar-fracciones-estados-exportacion.sql`. La migración conserva servicios, cantidades, usuarios, imágenes, configuraciones de visibilidad e historial existentes.
 
 Para una instalación nueva, ejecutar directamente `supabase-schema.sql`.
 
@@ -41,7 +38,7 @@ En la app:
 Cada insumo puede configurarse como:
 
 - **Cantidad entera:** escobas, guantes, bolsas, pulverizadores, etc.
-- **Cantidad fraccionable:** bidones u otros consumibles que pueden quedar a ¼, ½ o ¾.
+- **Cantidad fraccionable:** bidones u otros consumibles que pueden quedar en 0, medio o entero.
 - **Cantidad + estado:** trapos, rejillas, microfibras y otros elementos reutilizables.
 
 La migración configura inicialmente como fraccionables los principales bidones y como “cantidad + estado” los paños y fibras más habituales. Después puede modificarse cualquier insumo desde Administración.
