@@ -71,6 +71,7 @@ create table if not exists public.service_material_visibility(
 );
 
 alter table public.service_stock add column if not exists condition_status text;
+alter table public.service_stock add column if not exists notes text;
 alter table public.service_stock drop constraint if exists service_stock_condition_status_check;
 alter table public.service_stock add constraint service_stock_condition_status_check check(condition_status is null or condition_status in('good','used','replace'));
 
@@ -361,6 +362,7 @@ declare
   v_extra_id uuid;
   v_quantity numeric(12,2);
   v_condition text;
+  v_notes text;
   v_control_type text;
   v_reporter text := left(coalesce(nullif(btrim(p_reporter_name),''),'Operario sin identificar'),100);
   v_user uuid;
@@ -399,12 +401,14 @@ begin
       if v_control_type <> 'quantity_condition' or coalesce(v_condition,'') not in('good','used','replace') then
         v_condition := null;
       end if;
+      v_notes := case when v_control_type = 'quantity_condition' then nullif(left(btrim(coalesce(v_item->>'notes','')),500),'') else null end;
 
-      insert into public.service_stock(service_id,material_id,quantity,condition_status,updated_by,updated_at)
-      values(p_service_id,v_material_id,v_quantity,v_condition,v_user,now())
+      insert into public.service_stock(service_id,material_id,quantity,condition_status,notes,updated_by,updated_at)
+      values(p_service_id,v_material_id,v_quantity,v_condition,v_notes,v_user,now())
       on conflict(service_id,material_id) do update set
         quantity=excluded.quantity,
         condition_status=excluded.condition_status,
+        notes=excluded.notes,
         updated_by=excluded.updated_by,
         updated_at=now();
       v_count := v_count + 1;

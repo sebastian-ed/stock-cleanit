@@ -107,3 +107,10 @@ where email = 'TU-CORREO@DOMINIO.COM';
 ## Seguridad
 
 La carga pública utiliza funciones RPC `security definer`. Los operarios pueden consultar servicios activos y actualizar el inventario del servicio elegido, pero no pueden acceder a perfiles, historial administrativo ni observaciones internas.
+
+## Actualización v6 · duplicado y observaciones
+
+- En **Administración → Insumos** aparece la acción **Duplicar**. Abre el mismo formulario del alta con todos los datos precargados (nombre, categoría, detalle, unidad, tipo de control, niveles, orden, imagen y estado). La copia se crea como un insumo independiente y el original no se modifica.
+- Los insumos con control **Cantidad + estado** ahora permiten cargar una **Observación** junto con “Buen estado”, “Usado” o “Para reemplazar”.
+- Las observaciones se muestran también en la vista previa y en el Excel de exportación.
+- Para instalaciones ya existentes, ejecutar una vez `EJECUTAR-UNA-VEZ-EN-SUPABASE.sql` desde **Supabase → SQL Editor**. No elimina ni reinicia datos.

@@ -27,6 +27,7 @@
     adminService: null,
     stockDrafts: new Map(),
     conditionDrafts: new Map(),
+    noteDrafts: new Map(),
     extraDrafts: new Map(),
     exportServiceIds: new Set(),
     exportSelectionInitialized: false,
@@ -698,21 +699,23 @@
     const pending = stockDraft(serviceId, item.id);
     const pendingCondition = conditionDraft(serviceId, item.id);
     const conditionStatus = pendingCondition !== undefined ? pendingCondition : (currentStock?.condition_status ?? null);
+    const pendingNotes = noteDraft(serviceId, item.id);
+    const notes = pendingNotes !== undefined ? pendingNotes : (currentStock?.notes ?? '');
     const reported = Boolean(currentStock) || pending !== undefined;
     const value = pending !== undefined ? pending : (currentStock?.quantity ?? 0);
     const status = reported ? stockStatus(value, item, conditionStatus) : 'unreported';
     const enabled = isMaterialEnabled(serviceId, item.id);
-    return cardMarkup({ serviceId, item, context, value, conditionStatus, status, type: 'material', enabled });
+    return cardMarkup({ serviceId, item, context, value, conditionStatus, notes, status, type: 'material', enabled });
   }
 
   function extraCard(serviceId, item, context) {
     const pending = extraDraft(serviceId, item.id);
     const value = pending !== undefined ? pending : (item.quantity ?? 0);
     const status = stockStatus(value, item);
-    return cardMarkup({ serviceId, item, context, value, conditionStatus: null, status, type: 'extra' });
+    return cardMarkup({ serviceId, item, context, value, conditionStatus: null, notes: '', status, type: 'extra' });
   }
 
-  function cardMarkup({ serviceId, item, context, value, conditionStatus, status, type, enabled = true }) {
+  function cardMarkup({ serviceId, item, context, value, conditionStatus, notes = '', status, type, enabled = true }) {
     const labels = { unreported: 'Sin informar', critical: 'Crítico', low: 'Bajo', ok: 'Correcto' };
     const isExtra = type === 'extra';
     const image = item.image_url || 'assets/materials/default.svg';
@@ -743,7 +746,7 @@
         </div>
         ${fractional ? `<div class="fraction-presets" aria-label="Fracciones rápidas">${fractionValues.map((fractionValue, index) => `<button class="fraction-preset${Math.abs(Number(value) - fractionValue) < 0.001 ? ' active' : ''}" type="button" data-fraction-value="${fractionValue}">${fractionLabels[index]}</button>`).join('')}</div>` : ''}
         <div class="stock-unit">${eh(item.unit)}</div>
-        ${withCondition ? `<div class="condition-control"><div class="condition-control-label"><span>Estado del elemento</span><span data-condition-summary>${eh(conditionLabel(conditionStatus))}</span></div><div class="condition-options"><button class="condition-option${conditionStatus === 'good' ? ' active' : ''}" type="button" data-condition-value="good">Buen estado</button><button class="condition-option${conditionStatus === 'used' ? ' active' : ''}" type="button" data-condition-value="used">Usado</button><button class="condition-option${conditionStatus === 'replace' ? ' active' : ''}" type="button" data-condition-value="replace">Para reemplazar</button></div></div>` : ''}
+        ${withCondition ? `<div class="condition-control"><div class="condition-control-label"><span>Estado del elemento</span><span data-condition-summary>${eh(conditionLabel(conditionStatus))}</span></div><div class="condition-options"><button class="condition-option${conditionStatus === 'good' ? ' active' : ''}" type="button" data-condition-value="good">Buen estado</button><button class="condition-option${conditionStatus === 'used' ? ' active' : ''}" type="button" data-condition-value="used">Usado</button><button class="condition-option${conditionStatus === 'replace' ? ' active' : ''}" type="button" data-condition-value="replace">Para reemplazar</button></div><div class="condition-notes"><label class="condition-notes-label">Observaciones <span>(opcional)</span></label><textarea class="form-control condition-notes-input" rows="2" maxlength="500" placeholder="Ej.: mango flojo, cerdas gastadas, pierde líquido..." data-stock-note data-item-id="${item.id}" data-service-id="${serviceId}">${eh(notes || '')}</textarea></div></div>` : ''}
         <div class="threshold-note">Crítico ≤ ${qty(item.critical_level)} · objetivo ${qty(item.target_level)}</div>
         ${!isExtra && context === 'admin' ? `<button class="btn btn-sm ${enabled ? 'btn-outline-secondary' : 'btn-outline-success'} w-100 mt-3 material-visibility-button" type="button" data-toggle-service-material="${item.id}" data-service-id="${serviceId}"><i class="bi bi-${enabled ? 'eye-slash' : 'eye'} me-1"></i>${enabled ? 'Ocultar en este servicio' : 'Habilitar en este servicio'}</button>` : ''}
         ${isExtra && context === 'admin' ? `<button class="btn btn-sm btn-link text-danger w-100 mt-2" type="button" data-toggle-extra="${item.id}"><i class="bi bi-archive me-1"></i>Desactivar adicional</button>` : ''}
@@ -808,6 +811,9 @@
     const toggleServiceButton = event.target.closest('[data-toggle-service]');
     if (toggleServiceButton) return toggleService(toggleServiceButton.dataset.toggleService);
 
+    const duplicateMaterialButton = event.target.closest('[data-duplicate-material]');
+    if (duplicateMaterialButton) return openMaterial(material(duplicateMaterialButton.dataset.duplicateMaterial), true);
+
     const editMaterialButton = event.target.closest('[data-edit-material]');
     if (editMaterialButton) return openMaterial(material(editMaterialButton.dataset.editMaterial));
 
@@ -829,6 +835,13 @@
   }
 
   function stockInput(event) {
+    const noteInput = event.target.closest('[data-stock-note]');
+    if (noteInput) {
+      setNoteDraft(noteInput.dataset.serviceId, noteInput.dataset.itemId, noteInput.value);
+      renderDraftIndicator();
+      return;
+    }
+
     const input = event.target.closest('[data-stock-input]');
     if (!input) return;
     const card = input.closest('[data-item-card]');
@@ -893,6 +906,14 @@
     return S.conditionDrafts.get(`${serviceId}:${materialId}`);
   }
 
+  function setNoteDraft(serviceId, materialId, value) {
+    S.noteDrafts.set(`${serviceId}:${materialId}`, String(value || '').slice(0, 500));
+  }
+
+  function noteDraft(serviceId, materialId) {
+    return S.noteDrafts.get(`${serviceId}:${materialId}`);
+  }
+
   function extraDraft(serviceId, extraId) {
     return S.extraDrafts.get(`${serviceId}:${extraId}`);
   }
@@ -900,7 +921,7 @@
   function hasPendingDrafts(serviceId) {
     if (!serviceId) return false;
     const prefix = `${serviceId}:`;
-    return [...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.extraDrafts.keys()].some((key) => key.startsWith(prefix));
+    return [...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.noteDrafts.keys(), ...S.extraDrafts.keys()].some((key) => key.startsWith(prefix));
   }
 
   function clearDrafts(serviceId) {
@@ -908,19 +929,21 @@
     const prefix = `${serviceId}:`;
     [...S.stockDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.stockDrafts.delete(key); });
     [...S.conditionDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.conditionDrafts.delete(key); });
+    [...S.noteDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.noteDrafts.delete(key); });
     [...S.extraDrafts.keys()].forEach((key) => { if (key.startsWith(prefix)) S.extraDrafts.delete(key); });
   }
 
   function clearAllDrafts() {
     S.stockDrafts.clear();
     S.conditionDrafts.clear();
+    S.noteDrafts.clear();
     S.extraDrafts.clear();
   }
 
   function renderDraftIndicator() {
     const serviceId = currentServiceId();
     const prefix = `${serviceId}:`;
-    const count = new Set([...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.extraDrafts.keys()].filter((key) => key.startsWith(prefix))).size;
+    const count = new Set([...S.stockDrafts.keys(), ...S.conditionDrafts.keys(), ...S.noteDrafts.keys(), ...S.extraDrafts.keys()].filter((key) => key.startsWith(prefix))).size;
     E.operatorDraftCount.textContent = `${count} cambio${count === 1 ? '' : 's'} pendiente${count === 1 ? '' : 's'}`;
   }
 
@@ -935,11 +958,15 @@
         const currentStock = stock(serviceId, item.id);
         const pending = stockDraft(serviceId, item.id);
         const pendingCondition = conditionDraft(serviceId, item.id);
+        const pendingNotes = noteDraft(serviceId, item.id);
         return {
           material_id: item.id,
           quantity: pending !== undefined ? pending : (currentStock?.quantity ?? 0),
           condition_status: item.control_type === 'quantity_condition'
             ? (pendingCondition !== undefined ? pendingCondition : (currentStock?.condition_status ?? null))
+            : null,
+          notes: item.control_type === 'quantity_condition'
+            ? (pendingNotes !== undefined ? pendingNotes.trim() : (currentStock?.notes ?? null))
             : null
         };
       });
@@ -968,6 +995,7 @@
           material_id: item.material_id,
           quantity: item.quantity,
           condition_status: item.condition_status,
+          notes: item.notes || null,
           updated_by: S.session.user.id,
           updated_at: new Date().toISOString()
         }));
@@ -1110,7 +1138,7 @@
     S.exportServiceIds.clear();
     renderExportServices();
     E.exportPreviewSummary.textContent = 'No hay servicios seleccionados.';
-    E.exportPreviewBody.innerHTML = tableEmpty(7, 'Seleccioná al menos un servicio.');
+    E.exportPreviewBody.innerHTML = tableEmpty(8, 'Seleccioná al menos un servicio.');
   }
 
   function updateExportSelectionCount() {
@@ -1142,6 +1170,7 @@
           quantity: currentStock ? Number(currentStock.quantity) : null,
           unit: item.unit || '',
           condition_status: item.control_type === 'quantity_condition' ? (currentStock?.condition_status || null) : null,
+          notes: item.control_type === 'quantity_condition' ? (currentStock?.notes || '') : '',
           stock_status: status,
           item_type: 'Catálogo',
           updated_at: currentStock?.updated_at || null,
@@ -1161,6 +1190,7 @@
           quantity: Number(item.quantity),
           unit: item.unit || '',
           condition_status: null,
+          notes: '',
           stock_status: stockStatus(item.quantity, item),
           item_type: 'Adicional',
           updated_at: item.updated_at || null,
@@ -1175,14 +1205,14 @@
     const rows = buildExportDetailRows();
     if (!rows.length) {
       E.exportPreviewSummary.textContent = 'No hay inventario disponible para la selección.';
-      E.exportPreviewBody.innerHTML = tableEmpty(7, 'No hay registros para mostrar.');
+      E.exportPreviewBody.innerHTML = tableEmpty(8, 'No hay registros para mostrar.');
       return;
     }
     const selectedCount = selectedExportServices().length;
     const reportedCount = rows.filter((row) => row.quantity !== null).length;
     E.exportPreviewSummary.textContent = `${selectedCount} servicio${selectedCount === 1 ? '' : 's'} · ${rows.length} posiciones · ${reportedCount} informadas`;
     E.exportPreviewBody.innerHTML = rows.map((row) => (
-      `<tr><td><div class="table-title">${eh(row.service_name)}</div><div class="table-subtitle">${eh(row.address || 'Sin dirección')}</div></td><td><div class="table-title">${eh(row.item_name)}</div><div class="table-subtitle">${eh(row.category)}${row.item_type === 'Adicional' ? ' · adicional' : ''}</div></td><td class="export-quantity">${row.quantity === null ? 'Sin informar' : qty(row.quantity)}</td><td>${eh(row.unit)}</td><td>${row.control_type === 'quantity_condition' ? conditionChip(row.condition_status) : '—'}</td><td><span class="stock-state-text ${row.stock_status}">${eh(stockStatusLabel(row.stock_status))}</span></td><td class="text-nowrap">${eh(fmt(row.updated_at))}</td></tr>`
+      `<tr><td><div class="table-title">${eh(row.service_name)}</div><div class="table-subtitle">${eh(row.address || 'Sin dirección')}</div></td><td><div class="table-title">${eh(row.item_name)}</div><div class="table-subtitle">${eh(row.category)}${row.item_type === 'Adicional' ? ' · adicional' : ''}</div></td><td class="export-quantity">${row.quantity === null ? 'Sin informar' : qty(row.quantity)}</td><td>${eh(row.unit)}</td><td>${row.control_type === 'quantity_condition' ? conditionChip(row.condition_status) : '—'}</td><td class="export-notes">${row.notes ? eh(row.notes) : '—'}</td><td><span class="stock-state-text ${row.stock_status}">${eh(stockStatusLabel(row.stock_status))}</span></td><td class="text-nowrap">${eh(fmt(row.updated_at))}</td></tr>`
     )).join('');
   }
 
@@ -1203,6 +1233,7 @@
       'Cantidad': row.quantity,
       'Unidad': row.unit,
       'Estado del elemento': conditionLabel(row.condition_status, true),
+      'Observaciones': row.notes || '',
       'Estado de stock': stockStatusLabel(row.stock_status),
       'Tipo': row.item_type,
       'Última actualización': row.updated_at ? fmt(row.updated_at) : ''
@@ -1226,7 +1257,10 @@
         const row = rowIndex.get(`${currentService.id}|${column.key}`);
         const isMasterMaterial = column.key.startsWith('material:');
         record[column.name] = row ? (row.quantity ?? '') : (isMasterMaterial ? 'No aplica' : '');
-        if (column.condition) record[`${column.name} - Estado`] = row ? conditionLabel(row.condition_status, true) : '';
+        if (column.condition) {
+          record[`${column.name} - Estado`] = row ? conditionLabel(row.condition_status, true) : '';
+          record[`${column.name} - Observaciones`] = row ? (row.notes || '') : '';
+        }
       });
       return record;
     });
@@ -1239,7 +1273,7 @@
     detailSheet['!autofilter'] = { ref: detailSheet['!ref'] };
     detailSheet['!cols'] = [
       { wch: 34 }, { wch: 28 }, { wch: 42 }, { wch: 18 }, { wch: 34 }, { wch: 22 },
-      { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 22 }
+      { wch: 12 }, { wch: 18 }, { wch: 20 }, { wch: 32 }, { wch: 18 }, { wch: 12 }, { wch: 22 }
     ];
     XLSX.utils.book_append_sheet(workbook, matrixSheet, 'Stock por servicio');
     XLSX.utils.book_append_sheet(workbook, detailSheet, 'Detalle');
@@ -1258,7 +1292,7 @@
     ));
 
     E.materialsTableBody.innerHTML = items.length ? items.map((item) => (
-      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td><span class="control-type-badge">${eh(controlTypeLabel(item.control_type))}</span></td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`
+      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td><span class="control-type-badge">${eh(controlTypeLabel(item.control_type))}</span></td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" type="button" title="Duplicar insumo" aria-label="Duplicar ${ea(item.name)}" data-duplicate-material="${item.id}"><i class="bi bi-copy"></i><span class="duplicate-label">Duplicar</span></button><button class="btn btn-light" type="button" title="Editar insumo" aria-label="Editar ${ea(item.name)}" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" type="button" title="${item.active ? 'Desactivar' : 'Activar'} insumo" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`
     )).join('') : tableEmpty(8, 'No hay insumos que coincidan.');
   }
 
@@ -1357,10 +1391,14 @@
     toast(`Servicio ${item.active ? 'desactivado' : 'activado'}.`, 'success');
   }
 
-  function openMaterial(item = null) {
-    E.materialModalTitle.textContent = item ? 'Editar insumo' : 'Nuevo insumo';
-    E.materialId.value = item?.id || '';
-    E.materialName.value = item?.name || '';
+  function openMaterial(item = null, duplicate = false) {
+    const mode = duplicate ? 'duplicate' : (item ? 'edit' : 'create');
+    E.materialModal.dataset.mode = mode;
+    E.materialModalTitle.textContent = duplicate ? 'Duplicar insumo' : (item ? 'Editar insumo' : 'Nuevo insumo');
+    E.materialDuplicateHint.classList.toggle('d-none', !duplicate);
+    E.materialSubmitButton.innerHTML = duplicate ? '<i class="bi bi-copy me-2"></i>Crear copia' : (item ? 'Guardar cambios' : 'Crear insumo');
+    E.materialId.value = duplicate ? '' : (item?.id || '');
+    E.materialName.value = duplicate && item ? `${item.name} (copia)` : (item?.name || '');
     E.materialCategory.value = item?.category || '';
     E.materialDetail.value = item?.detail || '';
     E.materialUnit.value = item?.unit || 'unidad';
@@ -1425,9 +1463,10 @@
         : await S.sb.from('materials').insert(payload);
       if (result.error) throw result.error;
 
+      const mode = E.materialModal.dataset.mode || (id ? 'edit' : 'create');
       M.material.hide();
       await refreshAdmin(false);
-      toast('Insumo guardado.', 'success');
+      toast(mode === 'duplicate' ? 'Copia creada. El insumo original no fue modificado.' : (mode === 'edit' ? 'Insumo actualizado.' : 'Insumo creado.'), 'success');
     } catch (error) {
       toast(error.message || 'No se pudo guardar el insumo.', 'error');
     } finally {
