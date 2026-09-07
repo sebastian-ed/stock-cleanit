@@ -114,3 +114,12 @@ La carga pública utiliza funciones RPC `security definer`. Los operarios pueden
 - Los insumos con control **Cantidad + estado** ahora permiten cargar una **Observación** junto con “Buen estado”, “Usado” o “Para reemplazar”.
 - Las observaciones se muestran también en la vista previa y en el Excel de exportación.
 - Para instalaciones ya existentes, ejecutar una vez `EJECUTAR-UNA-VEZ-EN-SUPABASE.sql` desde **Supabase → SQL Editor**. No elimina ni reinicia datos.
+
+
+## Actualización v7 · eliminación segura de insumos
+
+- En **Administración → Insumos** se agregó una acción independiente para **Eliminar** definitivamente un insumo.
+- Antes de borrar, la app abre un modal de seguridad e informa que la acción es irreversible.
+- Para habilitar el botón **Eliminar definitivamente**, el administrador debe escribir exactamente el nombre completo del insumo.
+- La eliminación utiliza la política RLS administrativa ya incluida en el esquema existente, por lo que esta mejora **no requiere una migración SQL adicional**.
+- Al eliminar el insumo se eliminan también, por las relaciones actuales de la base, sus registros de stock, visibilidad e historial asociados.

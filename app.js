@@ -53,6 +53,7 @@
     M.extraMaterial = new bootstrap.Modal(E.extraMaterialModal);
     M.service = new bootstrap.Modal(E.serviceModal);
     M.material = new bootstrap.Modal(E.materialModal);
+    M.deleteMaterial = new bootstrap.Modal(E.deleteMaterialModal);
     M.user = new bootstrap.Modal(E.userModal);
     M.toast = new bootstrap.Toast(E.appToast, { delay: 3200 });
 
@@ -147,6 +148,8 @@
     E.addMaterialButton.addEventListener('click', () => openMaterial());
     E.materialForm.addEventListener('submit', saveMaterial);
     E.materialImageFile.addEventListener('change', previewImage);
+    E.deleteMaterialConfirmation.addEventListener('input', validateDeleteMaterialConfirmation);
+    E.deleteMaterialConfirmButton.addEventListener('click', deleteMaterial);
     E.userForm.addEventListener('submit', saveUser);
 
     document.querySelectorAll('[data-admin-tab]').forEach((button) => {
@@ -817,6 +820,9 @@
     const editMaterialButton = event.target.closest('[data-edit-material]');
     if (editMaterialButton) return openMaterial(material(editMaterialButton.dataset.editMaterial));
 
+    const deleteMaterialButton = event.target.closest('[data-delete-material]');
+    if (deleteMaterialButton) return openDeleteMaterial(material(deleteMaterialButton.dataset.deleteMaterial));
+
     const toggleMaterialButton = event.target.closest('[data-toggle-material]');
     if (toggleMaterialButton) return toggleMaterial(toggleMaterialButton.dataset.toggleMaterial);
 
@@ -1292,7 +1298,7 @@
     ));
 
     E.materialsTableBody.innerHTML = items.length ? items.map((item) => (
-      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td><span class="control-type-badge">${eh(controlTypeLabel(item.control_type))}</span></td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" type="button" title="Duplicar insumo" aria-label="Duplicar ${ea(item.name)}" data-duplicate-material="${item.id}"><i class="bi bi-copy"></i><span class="duplicate-label">Duplicar</span></button><button class="btn btn-light" type="button" title="Editar insumo" aria-label="Editar ${ea(item.name)}" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-danger' : 'btn-outline-success'}" type="button" title="${item.active ? 'Desactivar' : 'Activar'} insumo" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button></div></td></tr>`
+      `<tr><td><div class="table-material"><img class="table-thumb" src="${ea(item.image_url || 'assets/materials/default.svg')}" onerror="this.src='assets/materials/default.svg'" alt=""><div><div class="table-title">${eh(item.name)}</div><div class="table-subtitle">${eh(item.detail || 'Sin detalle')}</div></div></div></td><td>${eh(item.category)}</td><td>${eh(item.unit)}</td><td><span class="control-type-badge">${eh(controlTypeLabel(item.control_type))}</span></td><td>${qty(item.critical_level)}</td><td>${qty(item.target_level)}</td><td>${item.active ? '<span class="badge text-bg-success">Activo</span>' : '<span class="badge text-bg-secondary">Inactivo</span>'}</td><td class="text-end"><div class="action-group"><button class="btn btn-light" type="button" title="Duplicar insumo" aria-label="Duplicar ${ea(item.name)}" data-duplicate-material="${item.id}"><i class="bi bi-copy"></i><span class="duplicate-label">Duplicar</span></button><button class="btn btn-light" type="button" title="Editar insumo" aria-label="Editar ${ea(item.name)}" data-edit-material="${item.id}"><i class="bi bi-pencil"></i></button><button class="btn ${item.active ? 'btn-outline-secondary' : 'btn-outline-success'}" type="button" title="${item.active ? 'Desactivar' : 'Activar'} insumo" aria-label="${item.active ? 'Desactivar' : 'Activar'} ${ea(item.name)}" data-toggle-material="${item.id}"><i class="bi bi-${item.active ? 'archive' : 'check-lg'}"></i></button><button class="btn btn-outline-danger" type="button" title="Eliminar insumo definitivamente" aria-label="Eliminar ${ea(item.name)}" data-delete-material="${item.id}"><i class="bi bi-trash3"></i></button></div></td></tr>`
     )).join('') : tableEmpty(8, 'No hay insumos que coincidan.');
   }
 
@@ -1471,6 +1477,53 @@
       toast(error.message || 'No se pudo guardar el insumo.', 'error');
     } finally {
       buttonBusy(E.materialSubmitButton, false);
+    }
+  }
+
+  function openDeleteMaterial(item) {
+    if (!item) return;
+    E.deleteMaterialId.value = item.id;
+    E.deleteMaterialExpectedName.textContent = item.name;
+    E.deleteMaterialConfirmation.value = '';
+    E.deleteMaterialConfirmButton.disabled = true;
+    E.deleteMaterialConfirmButton.dataset.expectedName = item.name;
+    M.deleteMaterial.show();
+    E.deleteMaterialModal.addEventListener('shown.bs.modal', () => E.deleteMaterialConfirmation.focus(), { once: true });
+  }
+
+  function validateDeleteMaterialConfirmation() {
+    const expected = E.deleteMaterialConfirmButton.dataset.expectedName || '';
+    const typed = E.deleteMaterialConfirmation.value.trim();
+    E.deleteMaterialConfirmButton.disabled = !expected || typed !== expected;
+  }
+
+  async function deleteMaterial() {
+    const id = E.deleteMaterialId.value;
+    const item = material(id);
+    if (!item) return toast('El insumo ya no está disponible.', 'error');
+
+    const expected = item.name;
+    if (E.deleteMaterialConfirmation.value.trim() !== expected) {
+      E.deleteMaterialConfirmButton.disabled = true;
+      return toast('El nombre ingresado no coincide exactamente.', 'error');
+    }
+
+    buttonBusy(E.deleteMaterialConfirmButton, true, 'Eliminando...');
+    try {
+      const { error } = await S.sb.from('materials').delete().eq('id', id);
+      if (error) throw error;
+
+      M.deleteMaterial.hide();
+      E.deleteMaterialId.value = '';
+      E.deleteMaterialConfirmation.value = '';
+      E.deleteMaterialConfirmButton.dataset.expectedName = '';
+      await refreshAdmin(false);
+      toast(`Insumo “${item.name}” eliminado definitivamente.`, 'success');
+    } catch (error) {
+      toast(error.message || 'No se pudo eliminar el insumo.', 'error');
+    } finally {
+      buttonBusy(E.deleteMaterialConfirmButton, false);
+      E.deleteMaterialConfirmButton.disabled = true;
     }
   }
 
